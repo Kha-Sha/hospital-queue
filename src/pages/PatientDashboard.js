@@ -2,11 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebase';
 import { signOut } from 'firebase/auth';
-import { doc, getDoc, collection, query, where, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
-
+import { doc, getDoc, collection, query, where, onSnapshot, addDoc, serverTimestamp} from 'firebase/firestore';
 function PatientDashboard() {
   const navigate = useNavigate();
-  const [queueData, setQueueData] = useState(null);
+  const [, setQueueData] = useState(null);
   const [currentToken, setCurrentToken] = useState(0);
   const [loading, setLoading] = useState(true);
   const [checkedIn, setCheckedIn] = useState(false);
