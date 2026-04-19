@@ -132,11 +132,26 @@ function PatientDashboard() {
                 </div>
               </div>
 
-              {tokensAhead === 0 && (
-                <div style={{ background: '#dcfce7', borderRadius: '8px', padding: '12px', textAlign: 'center' }}>
-                  <p style={{ color: '#16a34a', fontWeight: 'bold', margin: 0 }}>🔔 Your turn is next!</p>
-                </div>
-              )}
+              {currentToken === tokenNumber ? (
+  <div style={{
+    background: '#ff0000',
+    borderRadius: '8px',
+    padding: '20px',
+    textAlign: 'center',
+    animation: 'pulse 1s infinite'
+  }}>
+    <p style={{ color: 'white', fontWeight: 'bold', margin: 0, fontSize: '20px' }}>
+      🚨 YOUR NUMBER IS BEING CALLED NOW!
+    </p>
+    <p style={{ color: 'white', margin: '8px 0 0 0', fontSize: '14px' }}>
+      Please proceed to the doctor's room immediately
+    </p>
+  </div>
+) : tokensAhead <= 2 && tokensAhead > 0 ? (
+  <div style={{ background: '#fef3c7', borderRadius: '8px', padding: '12px', textAlign: 'center' }}>
+    <p style={{ color: '#d97706', fontWeight: 'bold', margin: 0 }}>⚠️ Get ready — only {tokensAhead} patient(s) ahead of you!</p>
+  </div>
+) : null}
             </div>
           </div>
         )}
