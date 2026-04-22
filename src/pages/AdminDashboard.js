@@ -4,6 +4,7 @@ import { auth, db } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { collection, query, where, onSnapshot, doc, setDoc, updateDoc } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
+import { QRCodeCanvas as QRCode } from 'qrcode.react';
 
 function AdminDashboard() {
   const navigate = useNavigate();
@@ -255,6 +256,44 @@ function AdminDashboard() {
           </AnimatePresence>
         </motion.div>
       </div>
+      {/* QR Code section */}
+<motion.div
+  initial={{ opacity: 0, y: 20 }}
+  animate={{ opacity: 1, y: 0 }}
+  transition={{ delay: 0.4 }}
+  style={{
+    background: 'rgba(255,255,255,0.03)',
+    border: '1px solid rgba(255,255,255,0.07)',
+    borderRadius: '24px', padding: '28px',
+    backdropFilter: 'blur(20px)',
+    marginTop: '16px',
+    display: 'flex', alignItems: 'center', gap: '24px',
+    flexWrap: 'wrap'
+  }}
+>
+  <div style={{
+    background: 'white', padding: '12px', borderRadius: '12px',
+    display: 'inline-block'
+  }}>
+    <QRCode
+      value="https://hospital-queue-kappa.vercel.app/patient-register"
+      size={100}
+      bgColor="white"
+      fgColor="#060d1a"
+    />
+  </div>
+  <div>
+    <h3 style={{ color: 'white', margin: '0 0 8px 0', fontSize: '16px', fontWeight: '700' }}>
+      Patient Check-in QR Code
+    </h3>
+    <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '13px', margin: '0 0 4px 0' }}>
+      Print this and place it at reception
+    </p>
+    <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: '12px', margin: 0 }}>
+      Patients scan to register and check in
+    </p>
+  </div>
+</motion.div>
     </div>
   );
 }
