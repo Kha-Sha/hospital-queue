@@ -1,6 +1,6 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "Qalm",
+  "name": "Qalm - Smart Queue",
   "icons": [
     {
       "src": "favicon.ico",
@@ -18,8 +18,10 @@
       "sizes": "512x512"
     }
   ],
-  "start_url": ".",
+  "start_url": "/",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "theme_color": "#060d1a",
+  "background_color": "#060d1a",
+  "description": "Real-time hospital queue management. Skip the wait.",
+  "orientation": "portrait"
 }
