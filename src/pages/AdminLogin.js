@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
+import { motion } from 'framer-motion';
 
 function AdminLogin() {
   const navigate = useNavigate();
@@ -9,6 +10,48 @@ function AdminLogin() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [focused, setFocused] = useState('');
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let animationId;
+    let particles = [];
+    const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
+    resize();
+    window.addEventListener('resize', resize);
+    class Particle {
+      constructor() { this.reset(); }
+      reset() {
+        this.x = Math.random() * canvas.width;
+        this.y = Math.random() * canvas.height;
+        this.size = Math.random() * 1.5 + 0.5;
+        this.speedX = (Math.random() - 0.5) * 0.3;
+        this.speedY = (Math.random() - 0.5) * 0.3;
+        this.pulse = Math.random() * Math.PI * 2;
+      }
+      update() {
+        this.x += this.speedX; this.y += this.speedY;
+        this.pulse += 0.02;
+        this.opacity = 0.1 + Math.abs(Math.sin(this.pulse)) * 0.3;
+        if (this.x < 0 || this.x > canvas.width || this.y < 0 || this.y > canvas.height) this.reset();
+      }
+      draw() {
+        ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(99,179,237,${this.opacity})`; ctx.fill();
+      }
+    }
+    for (let i = 0; i < 80; i++) particles.push(new Particle());
+    const animate = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      particles.forEach(p => { p.update(); p.draw(); });
+      animationId = requestAnimationFrame(animate);
+    };
+    animate();
+    return () => { cancelAnimationFrame(animationId); window.removeEventListener('resize', resize); };
+  }, []);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -23,73 +66,138 @@ function AdminLogin() {
     setLoading(false);
   };
 
+  const inputStyle = (name) => ({
+    width: '100%', padding: '14px 16px',
+    background: 'rgba(255,255,255,0.05)',
+    border: `1px solid ${focused === name ? 'rgba(96,165,250,0.8)' : 'rgba(255,255,255,0.08)'}`,
+    borderRadius: '12px', fontSize: '15px', color: 'white',
+    boxSizing: 'border-box', outline: 'none', transition: 'all 0.3s ease',
+    boxShadow: focused === name ? '0 0 0 3px rgba(37,99,235,0.15)' : 'none',
+  });
+
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'linear-gradient(135deg, #1e3a5f 0%, #0f2027 100%)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontFamily: 'Arial, sans-serif'
+      background: 'radial-gradient(ellipse at 80% 50%, #0f1f3d 0%, #060d1a 60%, #0a0a0f 100%)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontFamily: "'Segoe UI', sans-serif", padding: '20px',
+      position: 'relative', overflow: 'hidden'
     }}>
-      <div style={{
-        background: 'white',
-        borderRadius: '20px',
-        padding: '40px',
-        width: '90%',
-        maxWidth: '380px',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
-      }}>
-        <div style={{ textAlign: 'center', marginBottom: '8px', fontSize: '36px' }}>⚕️</div>
-        <h2 style={{ color: '#1e3a5f', textAlign: 'center', marginBottom: '8px' }}>Staff Login</h2>
-        <p style={{ color: '#666', textAlign: 'center', marginBottom: '30px', fontSize: '14px' }}>
-          Hospital administration access only
-        </p>
+      <canvas ref={canvasRef} style={{
+        position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0
+      }} />
 
-        {error && <p style={{ color: 'red', textAlign: 'center', marginBottom: '15px', fontSize: '14px' }}>{error}</p>}
+      <div style={{
+        position: 'absolute', width: '400px', height: '400px',
+        background: 'radial-gradient(circle, rgba(37,99,235,0.1) 0%, transparent 70%)',
+        borderRadius: '50%', filter: 'blur(60px)', zIndex: 1
+      }} />
+
+      <motion.div
+        initial={{ opacity: 0, y: 40, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+        style={{
+          width: '100%', maxWidth: '400px',
+          background: 'rgba(255,255,255,0.04)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: '28px', padding: '44px 40px',
+          backdropFilter: 'blur(40px)',
+          boxShadow: '0 32px 64px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08)',
+          position: 'relative', zIndex: 2
+        }}
+      >
+        <div style={{
+          position: 'absolute', top: 0, left: '20%', right: '20%', height: '1px',
+          background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent)',
+        }} />
+
+        <div style={{ textAlign: 'center', marginBottom: '36px' }}>
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ duration: 0.5, delay: 0.2, type: 'spring', stiffness: 200 }}
+            style={{
+              width: '56px', height: '56px',
+              background: 'linear-gradient(135deg, #1d4ed8, #2563eb, #60a5fa)',
+              borderRadius: '16px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '26px', fontWeight: '900', color: 'white',
+              margin: '0 auto 20px auto',
+              boxShadow: '0 8px 32px rgba(37,99,235,0.5)',
+            }}>Q</motion.div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '8px' }}>
+            <h2 style={{ color: 'white', fontSize: '24px', fontWeight: '700', margin: 0 }}>Staff Access</h2>
+            <span style={{
+              background: 'rgba(37,99,235,0.2)', border: '1px solid rgba(37,99,235,0.3)',
+              borderRadius: '6px', padding: '2px 8px', fontSize: '11px',
+              color: '#60a5fa', fontWeight: '600', letterSpacing: '1px'
+            }}>ADMIN</span>
+          </div>
+          <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '14px' }}>
+            Hospital administration only
+          </p>
+        </div>
+
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            style={{
+              background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
+              borderRadius: '10px', padding: '12px 16px',
+              color: '#fca5a5', fontSize: '13px', textAlign: 'center', marginBottom: '20px'
+            }}>{error}</motion.div>
+        )}
 
         <form onSubmit={handleLogin}>
-          <input
-            type="tel"
-            placeholder="Staff Phone Number"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            required
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{
+              color: 'rgba(255,255,255,0.5)', fontSize: '12px', fontWeight: '600',
+              letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: '8px', display: 'block'
+            }}>Staff Phone Number</label>
+            <input
+              type="tel" placeholder="Your phone number"
+              value={phone} onChange={(e) => setPhone(e.target.value)}
+              onFocus={() => setFocused('phone')} onBlur={() => setFocused('')}
+              required style={inputStyle('phone')}
+            />
+          </div>
+
+          <div style={{ marginBottom: '28px' }}>
+            <label style={{
+              color: 'rgba(255,255,255,0.5)', fontSize: '12px', fontWeight: '600',
+              letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: '8px', display: 'block'
+            }}>Password</label>
+            <input
+              type="password" placeholder="Your password"
+              value={password} onChange={(e) => setPassword(e.target.value)}
+              onFocus={() => setFocused('password')} onBlur={() => setFocused('')}
+              required style={inputStyle('password')}
+            />
+          </div>
+
+          <motion.button
+            type="submit" disabled={loading}
+            whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
             style={{
-              width: '100%', padding: '12px', marginBottom: '15px',
-              border: '2px solid #e0e0e0', borderRadius: '8px',
-              fontSize: '16px', boxSizing: 'border-box'
-            }}
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            style={{
-              width: '100%', padding: '12px', marginBottom: '20px',
-              border: '2px solid #e0e0e0', borderRadius: '8px',
-              fontSize: '16px', boxSizing: 'border-box'
-            }}
-          />
-          <button
-            type="submit"
-            disabled={loading}
-            style={{
-              width: '100%', padding: '14px',
-              background: loading ? '#6b7280' : '#1e3a5f',
-              color: 'white', border: 'none', borderRadius: '8px',
-              fontSize: '16px', fontWeight: 'bold', cursor: 'pointer'
+              width: '100%', padding: '15px',
+              background: loading ? 'rgba(37,99,235,0.4)' : 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 50%, #3b82f6 100%)',
+              color: 'white', border: 'none', borderRadius: '12px',
+              fontSize: '15px', fontWeight: '700', cursor: 'pointer',
+              boxShadow: loading ? 'none' : '0 8px 32px rgba(37,99,235,0.4)',
             }}>
-            {loading ? 'Logging in...' : 'Login'}
-          </button>
+            {loading ? 'Signing in...' : 'Access Dashboard →'}
+          </motion.button>
         </form>
 
-        <p style={{ textAlign: 'center', marginTop: '20px', fontSize: '14px' }}>
-          <span onClick={() => navigate('/')} style={{ color: '#999', cursor: 'pointer' }}>← Back</span>
+        <p style={{ textAlign: 'center', marginTop: '24px' }}>
+          <span onClick={() => navigate('/')} style={{ color: 'rgba(255,255,255,0.2)', cursor: 'pointer', fontSize: '13px' }}>
+            ← Back to home
+          </span>
         </p>
-      </div>
+      </motion.div>
     </div>
   );
 }
