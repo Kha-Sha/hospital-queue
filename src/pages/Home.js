@@ -231,8 +231,25 @@ function Home() {
             }}>
             Hospital Staff
           </button>
+          
+          <button
+            onClick={() => navigate('/doctor-login')}
+            style={{
+              padding: '16px 36px',
+              background: 'rgba(16,185,129,0.1)',
+              color: '#10b981',
+              border: '1px solid rgba(16,185,129,0.3)',
+              borderRadius: '12px',
+              fontSize: '16px',
+              fontWeight: '700',
+              cursor: 'pointer',
+              backdropFilter: 'blur(10px)',
+              letterSpacing: '0.5px'
+            }}>
+            I'm a Doctor
+          </button>
         </motion.div>
-
+          
         {/* Stats */}
         <motion.div
           initial={{ opacity: 0 }}

@@ -36,6 +36,7 @@ function PatientDashboard() {
   const [patientName, setPatientName] = useState('');
   const [quoteIndex, setQuoteIndex] = useState(0);
   const [quoteVisible, setQuoteVisible] = useState(true);
+  const [isPending, setIsPending] = useState(false);
   const canvasRef = useRef(null);
 
   // Rotate quotes every 10 minutes
@@ -100,6 +101,16 @@ function PatientDashboard() {
       }
     };
     fetchName();
+    // Check if patient is pending department assignment
+     const pendingRef = doc(db, 'pending', auth.currentUser.uid);
+     const unsubPending = onSnapshot(pendingRef, (snap) => {
+       if (snap.exists() && snap.data().status === 'pending') {
+       setIsPending(true);
+       setLoading(false);
+     } else {
+       setIsPending(false);
+       }
+    });
 
     const settingsRef = doc(db, 'settings', 'hospital');
     const unsubSettings = onSnapshot(settingsRef, (snap) => {
@@ -120,7 +131,7 @@ function PatientDashboard() {
     const waitingQ = query(collection(db, 'queue'), where('status', '==', 'waiting'));
     const unsubWaiting = onSnapshot(waitingQ, (snapshot) => { setWaitingCount(snapshot.size); });
 
-    return () => { unsubSettings(); unsubQueue(); unsubWaiting(); };
+    return () => { unsubSettings(); unsubQueue(); unsubWaiting(); unsubPending(); };
   }, [navigate]);
 
   const handleCheckIn = async () => {
@@ -149,6 +160,14 @@ function PatientDashboard() {
   const isBeingCalled = currentToken === tokenNumber && tokenNumber !== null;
   const isNextUp = tokensAhead <= 2 && tokensAhead > 0;
 
+  useEffect(() => {
+    if (isBeingCalled) {
+      if (navigator.vibrate) {
+        navigator.vibrate([500, 200, 500, 200, 500]);
+      }
+    }
+  }, [isBeingCalled]);
+
   if (loading) return (
     <div style={{
       display: 'flex', justifyContent: 'center', alignItems: 'center',
@@ -157,6 +176,48 @@ function PatientDashboard() {
       color: 'white', fontSize: '18px'
     }}>Loading...</div>
   );
+  if (isPending) return (
+    <div style={{
+      minHeight: '100vh',
+      background: 'radial-gradient(ellipse at 20% 50%, #0f1f3d 0%, #060d1a 60%, #0a0a0f 100%)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontFamily: "'Segoe UI', sans-serif", padding: '20px'
+    }}>
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      style={{
+        background: 'rgba(255,255,255,0.04)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: '28px', padding: '48px 40px',
+        backdropFilter: 'blur(40px)',
+        boxShadow: '0 32px 64px rgba(0,0,0,0.6)',
+        textAlign: 'center', maxWidth: '400px', width: '100%'
+      }}
+    >
+      <motion.div
+        animate={{ rotate: 360 }}
+        transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+        style={{ fontSize: '48px', marginBottom: '24px' }}
+      >⏳</motion.div>
+      <h2 style={{ color: 'white', fontSize: '22px', fontWeight: '700', marginBottom: '12px' }}>
+        You're registered!
+      </h2>
+      <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '15px', lineHeight: '1.6' }}>
+        Please wait at reception while our staff assigns your department and generates your token.
+      </p>
+      <div style={{
+        marginTop: '24px', padding: '12px 20px',
+        background: 'rgba(37,99,235,0.1)', border: '1px solid rgba(37,99,235,0.2)',
+        borderRadius: '12px'
+      }}>
+        <p style={{ color: '#60a5fa', fontSize: '13px', margin: 0 }}>
+          Your screen will update automatically
+        </p>
+      </div>
+    </motion.div>
+  </div>
+);
 
   const currentQuote = QUOTES[quoteIndex];
 

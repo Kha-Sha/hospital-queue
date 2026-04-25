@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, db } from '../firebase';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { auth } from '../firebase';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { motion } from 'framer-motion';
 
-function PatientRegister() {
+function DoctorLogin() {
   const navigate = useNavigate();
-  const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -17,6 +15,7 @@ function PatientRegister() {
 
   useEffect(() => {
     const canvas = canvasRef.current;
+    if (!canvas) return;
     const ctx = canvas.getContext('2d');
     let animationId;
     let particles = [];
@@ -54,31 +53,15 @@ function PatientRegister() {
     return () => { cancelAnimationFrame(animationId); window.removeEventListener('resize', resize); };
   }, []);
 
-  const handleRegister = async (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
-    if (phone.length !== 10) { setError('Please enter a valid 10-digit phone number'); return; }
-    if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
     setLoading(true);
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, phone + '@hospital.com', password);
-      await setDoc(doc(db, 'patients', userCredential.user.uid), {
-        name, phone, createdAt: new Date(), role: 'patient'
-      });
-      await setDoc(doc(db, 'pending', userCredential.user.uid), {
-        name,
-        phone,
-        userId: userCredential.user.uid,
-        status: 'pending',
-        arrivedAt: new Date(),
-      });
-      navigate('/patient-dashboard');
+      await signInWithEmailAndPassword(auth, phone + '@hospital-doctor.com', password);
+      navigate('/doctor-dashboard');
     } catch (err) {
-      if (err.code === 'auth/email-already-in-use') {
-        setError('This phone number is already registered. Please login.');
-      } else {
-        setError('Registration failed. Please try again.');
-      }
+      setError('Invalid credentials. Please try again.');
     }
     setLoading(false);
   };
@@ -89,13 +72,13 @@ function PatientRegister() {
     border: `1px solid ${focused === name ? 'rgba(96,165,250,0.8)' : 'rgba(255,255,255,0.08)'}`,
     borderRadius: '12px', fontSize: '15px', color: 'white',
     boxSizing: 'border-box', outline: 'none', transition: 'all 0.3s ease',
-    boxShadow: focused === name ? '0 0 0 3px rgba(37,99,235,0.15), 0 0 20px rgba(37,99,235,0.1)' : 'none',
+    boxShadow: focused === name ? '0 0 0 3px rgba(37,99,235,0.15)' : 'none',
   });
 
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'radial-gradient(ellipse at 20% 50%, #0f1f3d 0%, #060d1a 60%, #0a0a0f 100%)',
+      background: 'radial-gradient(ellipse at 80% 50%, #0f1f3d 0%, #060d1a 60%, #0a0a0f 100%)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: "'Segoe UI', sans-serif", padding: '20px',
       position: 'relative', overflow: 'hidden'
@@ -106,7 +89,7 @@ function PatientRegister() {
 
       <div style={{
         position: 'absolute', width: '400px', height: '400px',
-        background: 'radial-gradient(circle, rgba(37,99,235,0.12) 0%, transparent 70%)',
+        background: 'radial-gradient(circle, rgba(16,185,129,0.1) 0%, transparent 70%)',
         borderRadius: '50%', filter: 'blur(60px)', zIndex: 1
       }} />
 
@@ -136,18 +119,18 @@ function PatientRegister() {
             transition={{ duration: 0.5, delay: 0.2, type: 'spring', stiffness: 200 }}
             style={{
               width: '56px', height: '56px',
-              background: 'linear-gradient(135deg, #1d4ed8, #2563eb, #60a5fa)',
+              background: 'linear-gradient(135deg, #059669, #10b981)',
               borderRadius: '16px',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '26px', fontWeight: '900', color: 'white',
-              margin: '0 auto 20px auto',
-              boxShadow: '0 8px 32px rgba(37,99,235,0.5)',
-            }}>Q</motion.div>
-          <h2 style={{ color: 'white', fontSize: '26px', fontWeight: '700', marginBottom: '8px', letterSpacing: '-0.5px' }}>
-            Create account
-          </h2>
+              fontSize: '26px', margin: '0 auto 20px auto',
+              boxShadow: '0 8px 32px rgba(16,185,129,0.4)',
+            }}>🩺</motion.div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '8px' }}>
+            <h2 style={{ color: 'white', fontSize: '24px', fontWeight: '700', margin: 0 }}>Doctor Login</h2>
+          </div>
           <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '14px' }}>
-            Join Qalm to track your hospital queue
+            Access your patient queue
           </p>
         </div>
 
@@ -162,61 +145,55 @@ function PatientRegister() {
             }}>{error}</motion.div>
         )}
 
-        <form onSubmit={handleRegister}>
-          {[
-            { label: 'Full Name', key: 'name', type: 'text', placeholder: 'Your full name', value: name, setter: setName },
-            { label: 'Phone Number', key: 'phone', type: 'tel', placeholder: '10-digit phone number', value: phone, setter: setPhone },
-            { label: 'Password', key: 'password', type: 'password', placeholder: 'Min 6 characters', value: password, setter: setPassword },
-          ].map((field, i) => (
-            <div key={i} style={{ marginBottom: i === 2 ? '28px' : '16px' }}>
-              <label style={{
-                color: 'rgba(255,255,255,0.5)', fontSize: '12px', fontWeight: '600',
-                letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: '8px', display: 'block'
-              }}>{field.label}</label>
-              <input
-                type={field.type}
-                placeholder={field.placeholder}
-                value={field.value}
-                onChange={(e) => field.setter(e.target.value)}
-                onFocus={() => setFocused(field.key)}
-                onBlur={() => setFocused('')}
-                required
-                style={inputStyle(field.key)}
-              />
-            </div>
-          ))}
+        <form onSubmit={handleLogin}>
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{
+              color: 'rgba(255,255,255,0.5)', fontSize: '12px', fontWeight: '600',
+              letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: '8px', display: 'block'
+            }}>Phone Number</label>
+            <input
+              type="tel" placeholder="Your phone number"
+              value={phone} onChange={(e) => setPhone(e.target.value)}
+              onFocus={() => setFocused('phone')} onBlur={() => setFocused('')}
+              required style={inputStyle('phone')}
+            />
+          </div>
+
+          <div style={{ marginBottom: '28px' }}>
+            <label style={{
+              color: 'rgba(255,255,255,0.5)', fontSize: '12px', fontWeight: '600',
+              letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: '8px', display: 'block'
+            }}>Password</label>
+            <input
+              type="password" placeholder="Your password"
+              value={password} onChange={(e) => setPassword(e.target.value)}
+              onFocus={() => setFocused('password')} onBlur={() => setFocused('')}
+              required style={inputStyle('password')}
+            />
+          </div>
 
           <motion.button
-            type="submit"
-            disabled={loading}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+            type="submit" disabled={loading}
+            whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
             style={{
               width: '100%', padding: '15px',
-              background: loading ? 'rgba(37,99,235,0.4)' : 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 50%, #3b82f6 100%)',
+              background: loading ? 'rgba(16,185,129,0.4)' : 'linear-gradient(135deg, #059669, #10b981)',
               color: 'white', border: 'none', borderRadius: '12px',
               fontSize: '15px', fontWeight: '700', cursor: 'pointer',
-              boxShadow: loading ? 'none' : '0 8px 32px rgba(37,99,235,0.4)',
-              letterSpacing: '0.3px'
+              boxShadow: loading ? 'none' : '0 8px 32px rgba(16,185,129,0.4)',
             }}>
-            {loading ? 'Creating account...' : 'Create Account →'}
+            {loading ? 'Signing in...' : 'Access Queue →'}
           </motion.button>
         </form>
 
-        <div style={{ marginTop: '24px', textAlign: 'center' }}>
-          <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.3)', marginBottom: '8px' }}>
-            Already registered?{' '}
-            <span onClick={() => navigate('/patient-login')} style={{ color: '#60a5fa', cursor: 'pointer', fontWeight: '600' }}>
-              Sign in
-            </span>
-          </p>
-          <span onClick={() => navigate('/')} style={{ color: 'rgba(255,255,255,0.2)', cursor: 'pointer', fontSize: '12px' }}>
+        <p style={{ textAlign: 'center', marginTop: '24px' }}>
+          <span onClick={() => navigate('/')} style={{ color: 'rgba(255,255,255,0.2)', cursor: 'pointer', fontSize: '13px' }}>
             ← Back to home
           </span>
-        </div>
+        </p>
       </motion.div>
     </div>
   );
 }
 
-export default PatientRegister;
+export default DoctorLogin;
