@@ -38,7 +38,7 @@ function PatientDashboard() {
   const [quoteVisible, setQuoteVisible] = useState(true);
   const [isPending, setIsPending] = useState(false);
   const canvasRef = useRef(null);
-
+  const [broadcast, setBroadcast] = useState('');
   // Rotate quotes every 10 minutes
   useEffect(() => {
     const interval = setInterval(() => {
@@ -105,16 +105,20 @@ function PatientDashboard() {
      const pendingRef = doc(db, 'pending', auth.currentUser.uid);
      const unsubPending = onSnapshot(pendingRef, (snap) => {
        if (snap.exists() && snap.data().status === 'pending') {
-       setIsPending(true);
-       setLoading(false);
-     } else {
-       setIsPending(false);
+         setIsPending(true);
+       } else {
+         setIsPending(false);
        }
+       setLoading(false);
+       
     });
 
     const settingsRef = doc(db, 'settings', 'hospital');
     const unsubSettings = onSnapshot(settingsRef, (snap) => {
-      if (snap.exists()) setCurrentToken(snap.data().currentToken || 0);
+      if (snap.exists()) {
+        setCurrentToken(snap.data().currentToken || 0);
+        setBroadcast(snap.data().broadcast || '');
+      }
     });
 
     const q = query(collection(db, 'queue'), where('userId', '==', auth.currentUser.uid), where('status', '==', 'waiting'));
@@ -125,11 +129,11 @@ function PatientDashboard() {
         setCheckedIn(true);
         setQueueData(data);
       }
-      setLoading(false);
     });
 
     const waitingQ = query(collection(db, 'queue'), where('status', '==', 'waiting'));
     const unsubWaiting = onSnapshot(waitingQ, (snapshot) => { setWaitingCount(snapshot.size); });
+   
 
     return () => { unsubSettings(); unsubQueue(); unsubWaiting(); unsubPending(); };
   }, [navigate]);
@@ -314,20 +318,35 @@ function PatientDashboard() {
                   </div>
                 </div>
 
-                <motion.button
-                  onClick={handleCheckIn}
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  style={{
-                    width: '100%', padding: '16px',
-                    background: 'linear-gradient(135deg, #1d4ed8, #2563eb, #3b82f6)',
-                    color: 'white', border: 'none', borderRadius: '14px',
-                    fontSize: '16px', fontWeight: '700', cursor: 'pointer',
-                    boxShadow: '0 8px 32px rgba(37,99,235,0.5)',
-                  }}>
-                  Check In Now →
-                </motion.button>
+                <div style={{
+                  padding: '16px',
+                  background: 'rgba(37,99,235,0.06)',
+                  border: '1px solid rgba(37,99,235,0.15)',
+                  borderRadius: '14px',
+                  textAlign: 'center'
+                }}>
+                  <p style={{ color: '#60a5fa', fontSize: '14px', margin: 0, fontWeight: '600' }}>
+                    🏥 Please check in at reception to get your token
+                  </p>
+                </div>
               </div>
+              {broadcast && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  style={{
+                    background: 'rgba(251,191,36,0.08)',
+                    border: '1px solid rgba(251,191,36,0.2)',
+                    borderRadius: '14px', padding: '14px 18px',
+                    marginBottom: '16px',
+                    display: 'flex', alignItems: 'center', gap: '12px'
+                  }}>
+                  <span style={{ fontSize: '20px' }}>📢</span>
+                  <p style={{ color: '#fbbf24', fontSize: '14px', fontWeight: '600', margin: 0 }}>
+                    {broadcast}
+                  </p>
+                </motion.div>
+              )}
 
               {/* Quote card - shown before checkin */}
               <motion.div

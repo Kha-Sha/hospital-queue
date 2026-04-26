@@ -68,7 +68,24 @@ function PatientLogin() {
     setError('');
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, phone + '@hospital.com', password);
+      const userCredential = await signInWithEmailAndPassword(auth, phone + '@hospital.com', password);
+      const user = userCredential.user;
+
+      // Get patient info
+      const { getDoc, doc, setDoc } = await import('firebase/firestore');
+      const { db } = await import('../firebase');
+      const patientSnap = await getDoc(doc(db, 'patients', user.uid));
+      const patientData = patientSnap.exists() ? patientSnap.data() : {};
+
+      // Create pending record so receptionist can assign department
+      await setDoc(doc(db, 'pending', user.uid), {
+        name: patientData.name || phone,
+        phone: patientData.phone || phone,
+        userId: user.uid,
+        status: 'pending',
+        arrivedAt: new Date(),
+      });
+
       navigate('/patient-dashboard');
     } catch (err) {
       setError('Invalid phone number or password');
