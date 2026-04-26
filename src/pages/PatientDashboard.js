@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebase';
 import { signOut } from 'firebase/auth';
-import { doc, getDoc, collection, query, where, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
 import { setDoc } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -138,25 +138,7 @@ function PatientDashboard() {
     return () => { unsubSettings(); unsubQueue(); unsubWaiting(); unsubPending(); };
   }, [navigate]);
 
-  const handleCheckIn = async () => {
-    try {
-      const settingsRef = doc(db, 'settings', 'hospital');
-      const settingsSnap = await getDoc(settingsRef);
-      const lastToken = settingsSnap.exists() ? settingsSnap.data().lastToken || 0 : 0;
-      const newToken = lastToken + 1;
-      await addDoc(collection(db, 'queue'), {
-        userId: auth.currentUser.uid,
-        email: auth.currentUser.email,
-        name: patientName,
-        tokenNumber: newToken,
-        status: 'waiting',
-        checkInTime: serverTimestamp(),
-      });
-      await setDoc(settingsRef, { lastToken: newToken }, { merge: true });
-      setTokenNumber(newToken);
-      setCheckedIn(true);
-    } catch (err) { console.error(err); }
-  };
+
 
   const handleLogout = async () => { await signOut(auth); navigate('/'); };
   const tokensAhead = tokenNumber ? Math.max(0, tokenNumber - currentToken - 1) : 0;
