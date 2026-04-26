@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
-import { setDoc } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const QUOTES = [
