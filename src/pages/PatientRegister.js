@@ -2,21 +2,39 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { motion } from 'framer-motion';
+
+const ALL_DEPARTMENTS = [
+  'General OPD', 'Paediatrics', 'Cardiology', 'Orthopaedics',
+  'Gynaecology', 'Dermatology', 'ENT', 'Ophthalmology',
+  'Neurology', 'Psychiatry', 'Dental', 'Radiology', 'Pathology/Lab'
+];
 
 function PatientRegister() {
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [preferredDept, setPreferredDept] = useState('');
+  const [activeDepartments, setActiveDepartments] = useState(ALL_DEPARTMENTS); // activeDepartments
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [focused, setFocused] = useState('');
   const canvasRef = useRef(null);
 
   useEffect(() => {
+    getDoc(doc(db, 'settings', 'hospital')).then(snap => {
+      if (snap.exists() && snap.data().activeDepartments?.length) {
+        setActiveDepartments(snap.data().activeDepartments); // activeDepartments
+      }
+    });
+  }, []);
+
+  useEffect(() => {
     const canvas = canvasRef.current;
+    const isLowEnd = navigator.hardwareConcurrency <= 2 || window.innerWidth < 400;
+    if (isLowEnd) return;
     const ctx = canvas.getContext('2d');
     let animationId;
     let particles = [];
@@ -71,6 +89,7 @@ function PatientRegister() {
         userId: userCredential.user.uid,
         status: 'pending',
         arrivedAt: new Date(),
+        ...(preferredDept ? { preferredDept } : {}),
       });
       navigate('/patient-dashboard');
     } catch (err) {
@@ -185,6 +204,28 @@ function PatientRegister() {
               />
             </div>
           ))}
+
+          <div style={{ marginBottom: '28px' }}>
+            <label style={{ color: 'rgba(255,255,255,0.5)', fontSize: '12px', fontWeight: '600', letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: '8px', display: 'block' }}>
+              Department (optional)
+            </label>
+            <select
+              value={preferredDept}
+              onChange={e => setPreferredDept(e.target.value)}
+              style={{
+                width: '100%', padding: '14px 16px',
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: '12px', fontSize: '15px', color: preferredDept ? 'white' : 'rgba(255,255,255,0.35)',
+                boxSizing: 'border-box', outline: 'none', cursor: 'pointer',
+              }}
+            >
+              <option value="" style={{ background: '#0f1f3d', color: 'rgba(255,255,255,0.5)' }}>Select department (optional)</option>
+              {activeDepartments.map(dept => ( // activeDepartments
+                <option key={dept} value={dept} style={{ background: '#0f1f3d', color: 'white' }}>{dept}</option>
+              ))}
+            </select>
+          </div>
 
           <motion.button
             type="submit"

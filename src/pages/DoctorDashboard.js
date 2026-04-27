@@ -14,11 +14,14 @@ function DoctorDashboard() {
   const [completedCount, setCompletedCount] = useState(0);
   const [calling, setCalling] = useState(false);
   const [doctorName, setDoctorName] = useState('');
+  const [notConfigured, setNotConfigured] = useState(false);
   const canvasRef = useRef(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    const isLowEnd = navigator.hardwareConcurrency <= 2 || window.innerWidth < 400;
+    if (isLowEnd) return;
     const ctx = canvas.getContext('2d');
     let animationId;
     let particles = [];
@@ -64,6 +67,8 @@ function DoctorDashboard() {
       if (snap.exists()) {
         setDoctorName(snap.data().name || 'Doctor');
         setDepartment(snap.data().department || 'General OPD');
+      } else {
+        setNotConfigured(true);
       }
     };
     fetchDoctorInfo();
@@ -111,6 +116,37 @@ function DoctorDashboard() {
   };
 
   const handleLogout = async () => { await signOut(auth); navigate('/'); };
+
+  if (notConfigured) return (
+    <div style={{
+      minHeight: '100vh',
+      background: 'radial-gradient(ellipse at 20% 50%, #0a1f14 0%, #060d1a 60%, #0a0a0f 100%)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontFamily: "'Segoe UI', sans-serif", padding: '20px'
+    }}>
+      <div style={{
+        background: 'rgba(255,255,255,0.04)',
+        border: '1px solid rgba(239,68,68,0.2)',
+        borderRadius: '24px', padding: '40px',
+        backdropFilter: 'blur(40px)', textAlign: 'center', maxWidth: '380px'
+      }}>
+        <div style={{ fontSize: '40px', marginBottom: '16px' }}>⚠️</div>
+        <h3 style={{ color: 'white', fontSize: '18px', fontWeight: '700', marginBottom: '12px' }}>
+          Account not configured
+        </h3>
+        <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '14px', lineHeight: '1.6', marginBottom: '24px' }}>
+          Your account is not configured. Please contact admin.
+        </p>
+        <button onClick={handleLogout} style={{
+          padding: '10px 24px',
+          background: 'rgba(255,255,255,0.06)',
+          border: '1px solid rgba(255,255,255,0.1)',
+          borderRadius: '10px', color: 'rgba(255,255,255,0.5)',
+          cursor: 'pointer', fontSize: '14px'
+        }}>Logout</button>
+      </div>
+    </div>
+  );
 
   return (
     <div style={{

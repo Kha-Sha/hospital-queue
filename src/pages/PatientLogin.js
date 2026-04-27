@@ -15,6 +15,8 @@ function PatientLogin() {
 
   useEffect(() => {
     const canvas = canvasRef.current;
+    const isLowEnd = navigator.hardwareConcurrency <= 2 || window.innerWidth < 400;
+    if (isLowEnd) return;
     const ctx = canvas.getContext('2d');
     let animationId;
     let particles = [];
@@ -77,15 +79,17 @@ function PatientLogin() {
       const patientSnap = await getDoc(doc(db, 'patients', user.uid));
       const patientData = patientSnap.exists() ? patientSnap.data() : {};
 
-      // If already pending or already waiting, skip straight to dashboard
-      const pendingSnap = await getDoc(doc(db, 'pending', user.uid));
-      if (pendingSnap.exists() && pendingSnap.data().status === 'pending') {
-        navigate('/patient-dashboard');
-        return;
-      }
+      // 1. Already has a waiting token
       const existingQ = query(collection(db, 'queue'), where('userId', '==', user.uid), where('status', '==', 'waiting'));
       const existingSnap = await getDocs(existingQ);
       if (!existingSnap.empty) {
+        navigate('/patient-dashboard');
+        return;
+      }
+      // 2. Already in pending flow (pending = awaiting assignment, assigned = token issued today)
+      const pendingSnap = await getDoc(doc(db, 'pending', user.uid));
+      const pendingStatus = pendingSnap.exists() ? pendingSnap.data().status : null;
+      if (pendingStatus === 'pending' || pendingStatus === 'assigned') {
         navigate('/patient-dashboard');
         return;
       }

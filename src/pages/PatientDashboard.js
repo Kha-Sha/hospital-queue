@@ -1,9 +1,26 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebase';
 import { signOut } from 'firebase/auth';
-import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, getDocs, collection, query, where, onSnapshot } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
+
+function playNotificationSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [[523, 0], [659, 0.18], [784, 0.36]].forEach(([freq, delay]) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.value = freq;
+      osc.type = 'sine';
+      const start = ctx.currentTime + delay;
+      gain.gain.setValueAtTime(0.4, start);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.6);
+      osc.start(start); osc.stop(start + 0.7);
+    });
+  } catch (_) {}
+}
 
 const QUOTES = [
   { text: "The present moment is the only moment available to us, and it is the door to all moments.", author: "Thich Nhat Hanh" },
@@ -31,12 +48,19 @@ function PatientDashboard() {
   const [loading, setLoading] = useState(true);
   const [checkedIn, setCheckedIn] = useState(false);
   const [tokenNumber, setTokenNumber] = useState(null);
-  const [waitingCount, setWaitingCount] = useState(0);
+  const [patientDepartment, setPatientDepartment] = useState('');
   const [patientName, setPatientName] = useState('');
   const [quoteIndex, setQuoteIndex] = useState(0);
   const [quoteVisible, setQuoteVisible] = useState(true);
   const [isPending, setIsPending] = useState(false);
   const [hasBeenSeen, setHasBeenSeen] = useState(false);
+  const [hospitalName, setHospitalName] = useState('');
+  const [showHistory, setShowHistory] = useState(false);
+  const [visitHistory, setVisitHistory] = useState([]);
+  const [tokensAhead, setTokensAhead] = useState(0); // tokensAhead accurate count
+  const [showReceipt, setShowReceipt] = useState(false); // tokenReceipt
+  const [checkInTimeLocal, setCheckInTimeLocal] = useState(null); // tokenReceipt
+  const receiptShownRef = useRef(false); // tokenReceipt
   const canvasRef = useRef(null);
   // Rotate quotes every 10 minutes
   useEffect(() => {
@@ -53,6 +77,8 @@ function PatientDashboard() {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    const isLowEnd = navigator.hardwareConcurrency <= 2 || window.innerWidth < 400;
+    if (isLowEnd) return;
     const ctx = canvas.getContext('2d');
     let animationId;
     let particles = [];
@@ -116,6 +142,7 @@ function PatientDashboard() {
     const unsubSettings = onSnapshot(settingsRef, (snap) => {
       if (snap.exists()) {
         setCurrentToken(snap.data().currentToken || 0);
+        setHospitalName(snap.data().hospitalName || '');
       }
     });
 
@@ -124,34 +151,69 @@ function PatientDashboard() {
       if (!snapshot.empty) {
         const data = snapshot.docs[0].data();
         setTokenNumber(data.tokenNumber);
+        setPatientDepartment(data.department || '');
         setCheckedIn(true);
         setQueueData(data);
+        if (!receiptShownRef.current) { // tokenReceipt: show once on first assignment
+          receiptShownRef.current = true;
+          setCheckInTimeLocal(new Date());
+          setShowReceipt(true);
+        }
       }
     });
 
-    const waitingQ = query(collection(db, 'queue'), where('status', '==', 'waiting'));
-    const unsubWaiting = onSnapshot(waitingQ, (snapshot) => { setWaitingCount(snapshot.size); });
-
-
-    return () => { unsubSettings(); unsubQueue(); unsubWaiting(); unsubPending(); };
+    return () => { unsubSettings(); unsubQueue(); unsubPending(); };
   }, [navigate]);
 
 
 
 
   const handleLogout = async () => { await signOut(auth); navigate('/'); };
-  const tokensAhead = tokenNumber ? Math.max(0, tokenNumber - currentToken - 1) : 0;
   const estimatedWait = tokensAhead * 10;
   const isBeingCalled = currentToken === tokenNumber && tokenNumber !== null;
+  const estimatedTime = (() => {
+    const t = new Date(Date.now() + tokensAhead * 10 * 60 * 1000);
+    const h = t.getHours(), m = String(t.getMinutes()).padStart(2, '0');
+    return `~${h % 12 || 12}:${m} ${h >= 12 ? 'PM' : 'AM'}`;
+  })();
   const isNextUp = tokensAhead <= 2 && tokensAhead > 0;
 
   useEffect(() => {
     if (isBeingCalled) {
+      playNotificationSound();
       if (navigator.vibrate) {
         navigator.vibrate([500, 200, 500, 200, 500]);
       }
     }
   }, [isBeingCalled]);
+
+  // tokensAhead: accurate count from Firestore — counts waiting patients ahead in queue
+  useEffect(() => {
+    if (!tokenNumber) return;
+    const q = query(collection(db, 'queue'), where('status', '==', 'waiting'));
+    const unsub = onSnapshot(q, (snap) => {
+      const count = snap.docs.filter(d => d.data().tokenNumber < tokenNumber).length;
+      setTokensAhead(count);
+    });
+    return () => unsub();
+  }, [tokenNumber]);
+
+  useEffect(() => {
+    if (!showHistory || !auth.currentUser) return;
+    const fetchHistory = async () => {
+      const snap = await getDocs(query(
+        collection(db, 'queue'),
+        where('userId', '==', auth.currentUser.uid),
+        where('status', '==', 'completed')
+      ));
+      const sorted = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (b.checkInTime?.seconds || 0) - (a.checkInTime?.seconds || 0))
+        .slice(0, 5);
+      setVisitHistory(sorted);
+    };
+    fetchHistory();
+  }, [showHistory]);
 
   if (loading) return (
     <div style={{
@@ -228,14 +290,8 @@ function PatientDashboard() {
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
           transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
-          style={{
-            width: '80px', height: '80px', borderRadius: '50%',
-            background: 'linear-gradient(135deg, rgba(34,197,94,0.2), rgba(74,222,128,0.1))',
-            border: '1px solid rgba(74,222,128,0.3)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            margin: '0 auto 28px auto', fontSize: '36px'
-          }}
-        >✓</motion.div>
+          style={{ fontSize: '72px', margin: '0 auto 28px auto', lineHeight: 1 }}
+        >🌿</motion.div>
         <h2 style={{ color: 'white', fontSize: '28px', fontWeight: '700', marginBottom: '12px' }}>
           You're all set!
         </h2>
@@ -287,8 +343,13 @@ function PatientDashboard() {
               }}>Q</div>
               <span style={{ color: 'white', fontWeight: '700', fontSize: '16px', letterSpacing: '1px' }}>QALM</span>
             </div>
+            {hospitalName && (
+              <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '12px', marginTop: '2px', fontWeight: '600' }}>
+                {hospitalName}
+              </p>
+            )}
             {patientName && (
-              <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '13px', marginTop: '4px' }}>
+              <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '13px', marginTop: '2px' }}>
                 Hello, {patientName}
               </p>
             )}
@@ -307,94 +368,18 @@ function PatientDashboard() {
               <div style={{
                 background: 'rgba(255,255,255,0.04)',
                 border: '1px solid rgba(255,255,255,0.08)',
-                borderRadius: '28px', padding: '36px',
+                borderRadius: '28px', padding: '40px',
                 backdropFilter: 'blur(40px)',
-                boxShadow: '0 32px 64px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08)',
-                textAlign: 'center', marginBottom: '16px',
-                position: 'relative', overflow: 'hidden'
+                textAlign: 'center'
               }}>
-                <div style={{
-                  position: 'absolute', top: 0, left: '20%', right: '20%', height: '1px',
-                  background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent)',
-                }} />
-                <div style={{
-                  width: '64px', height: '64px', borderRadius: '20px',
-                  background: 'linear-gradient(135deg, rgba(37,99,235,0.3), rgba(96,165,250,0.1))',
-                  border: '1px solid rgba(96,165,250,0.2)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  margin: '0 auto 20px auto', fontSize: '28px'
-                }}>🩺</div>
-
-                <h3 style={{ color: 'white', fontSize: '22px', fontWeight: '700', marginBottom: '8px' }}>
-                  Ready to check in?
+                <div style={{ fontSize: '48px', marginBottom: '20px' }}>🏥</div>
+                <h3 style={{ color: 'white', fontSize: '22px', fontWeight: '700', marginBottom: '12px' }}>
+                  Please check in at reception
                 </h3>
-                <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '14px', marginBottom: '24px' }}>
-                  You'll get a token and can track your position in real time
+                <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '14px', lineHeight: '1.6' }}>
+                  Show this screen to the receptionist to get your token assigned.
                 </p>
-
-                <div style={{
-                  display: 'flex', justifyContent: 'center', gap: '24px', margin: '0 0 28px 0',
-                  padding: '16px', background: 'rgba(255,255,255,0.03)', borderRadius: '14px',
-                  border: '1px solid rgba(255,255,255,0.05)'
-                }}>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ color: '#60a5fa', fontSize: '32px', fontWeight: '800' }}>{waitingCount}</div>
-                    <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '12px', marginTop: '2px' }}>waiting now</div>
-                  </div>
-                  <div style={{ width: '1px', background: 'rgba(255,255,255,0.06)' }} />
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ color: '#60a5fa', fontSize: '32px', fontWeight: '800' }}>~{waitingCount * 10}m</div>
-                    <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '12px', marginTop: '2px' }}>est. wait</div>
-                  </div>
-                </div>
-
-                <div style={{
-                  padding: '16px',
-                  background: 'rgba(37,99,235,0.06)',
-                  border: '1px solid rgba(37,99,235,0.15)',
-                  borderRadius: '14px',
-                  textAlign: 'center'
-                }}>
-                  <p style={{ color: '#60a5fa', fontSize: '14px', margin: 0, fontWeight: '600' }}>
-                    🏥 Please check in at reception to get your token
-                  </p>
-                </div>
               </div>
-              {/* Quote card - shown before checkin */}
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.3 }}
-                style={{
-                  background: 'rgba(255,255,255,0.02)',
-                  border: '1px solid rgba(255,255,255,0.06)',
-                  borderRadius: '20px', padding: '24px',
-                  backdropFilter: 'blur(20px)',
-                }}
-              >
-                <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: '11px', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '12px' }}>
-                  While you wait
-                </p>
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={quoteIndex}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: quoteVisible ? 1 : 0, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.6 }}
-                  >
-                    <p style={{
-                      color: 'rgba(255,255,255,0.75)', fontSize: '15px',
-                      lineHeight: '1.7', fontStyle: 'italic', marginBottom: '12px'
-                    }}>
-                      "{currentQuote.text}"
-                    </p>
-                    <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '13px' }}>
-                      — {currentQuote.author}
-                    </p>
-                  </motion.div>
-                </AnimatePresence>
-              </motion.div>
             </motion.div>
           ) : (
             <motion.div key="queue" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
@@ -459,17 +444,71 @@ function PatientDashboard() {
                     >
                       {tokenNumber}
                     </motion.div>
-                    <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: '13px' }}>Token number</p>
+                    <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: '13px', marginBottom: patientDepartment ? '12px' : 0 }}>Token number</p>
+                    {patientDepartment && (
+                      <span style={{
+                        display: 'inline-block',
+                        background: 'rgba(255,255,255,0.1)',
+                        borderRadius: '20px', padding: '4px 14px',
+                        color: 'white', fontSize: '13px', fontWeight: '500'
+                      }}>{patientDepartment}</span>
+                    )}
                   </>
                 )}
               </motion.div>
 
+              {/* tokenReceipt: shown once when token is first assigned */}
+              <AnimatePresence>
+                {showReceipt && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+                    style={{
+                      background: 'rgba(255,255,255,0.03)',
+                      border: '1px dashed rgba(255,255,255,0.18)',
+                      borderRadius: '20px', padding: '20px 24px', marginBottom: '16px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
+                      <div>
+                        <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: '10px', letterSpacing: '2px', textTransform: 'uppercase', margin: 0 }}>Your Token Receipt</p>
+                        <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: '12px', fontWeight: '600', margin: '3px 0 0 0' }}>{hospitalName}</p>
+                      </div>
+                      <button onClick={() => setShowReceipt(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.3)', fontSize: '20px', padding: '0 2px', lineHeight: 1 }}>×</button>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+                      <div>
+                        <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '11px', margin: '0 0 3px 0' }}>Department</p>
+                        <p style={{ color: 'white', fontSize: '14px', fontWeight: '700', margin: 0 }}>{patientDepartment}</p>
+                      </div>
+                      <div>
+                        <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '11px', margin: '0 0 3px 0' }}>Token Number</p>
+                        <p style={{ color: '#60a5fa', fontSize: '30px', fontWeight: '900', margin: 0, lineHeight: 1 }}>{tokenNumber}</p>
+                      </div>
+                      <div>
+                        <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '11px', margin: '0 0 3px 0' }}>Check-in Time</p>
+                        <p style={{ color: 'white', fontSize: '13px', fontWeight: '600', margin: 0 }}>
+                          {checkInTimeLocal ? checkInTimeLocal.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : '—'}
+                        </p>
+                      </div>
+                      <div>
+                        <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '11px', margin: '0 0 3px 0' }}>Est. Wait</p>
+                        <p style={{ color: 'white', fontSize: '13px', fontWeight: '600', margin: 0 }}>{estimatedWait} min</p>
+                      </div>
+                    </div>
+                    <div style={{ borderTop: '1px dashed rgba(255,255,255,0.1)', paddingTop: '10px', textAlign: 'center' }}>
+                      <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: '11px', margin: 0 }}>Show this to reception if needed</p>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               {/* Stats */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 400 ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: '10px', marginBottom: '16px' }}>
                 {[
                   { label: 'Now Calling', value: currentToken, highlight: false },
                   { label: 'Ahead of You', value: tokensAhead, highlight: tokensAhead === 0 },
                   { label: 'Est. Wait', value: `${estimatedWait}m`, highlight: false },
+                  { label: 'Est. Time', value: estimatedTime, highlight: false },
                 ].map((stat, i) => (
                   <div key={i} style={{
                     background: 'rgba(255,255,255,0.04)',
@@ -502,7 +541,7 @@ function PatientDashboard() {
                 background: 'rgba(255,255,255,0.02)',
                 border: '1px solid rgba(255,255,255,0.05)',
                 borderRadius: '20px', padding: '22px',
-                backdropFilter: 'blur(20px)',
+                backdropFilter: 'blur(20px)', marginBottom: '12px',
               }}>
                 <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: '11px', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '10px' }}>
                   While you wait
@@ -525,6 +564,65 @@ function PatientDashboard() {
                       — {currentQuote.author}
                     </p>
                   </motion.div>
+                </AnimatePresence>
+              </div>
+
+              {/* Visit History */}
+              <div>
+                <button
+                  onClick={() => setShowHistory(h => !h)}
+                  style={{
+                    width: '100%', padding: '12px 16px',
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid rgba(255,255,255,0.06)',
+                    borderRadius: '14px', color: 'rgba(255,255,255,0.35)',
+                    cursor: 'pointer', fontSize: '13px', fontWeight: '600',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  }}
+                >
+                  <span>Visit History</span>
+                  <span>{showHistory ? '▲' : '▼'}</span>
+                </button>
+                <AnimatePresence>
+                  {showHistory && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.3 }}
+                      style={{ overflow: 'hidden' }}
+                    >
+                      <div style={{ paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {visitHistory.length === 0 ? (
+                          <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: '13px', textAlign: 'center', padding: '20px 0' }}>
+                            No past visits found
+                          </p>
+                        ) : visitHistory.map(v => {
+                          const date = v.checkInTime?.seconds
+                            ? new Date(v.checkInTime.seconds * 1000).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+                            : '—';
+                          return (
+                            <div key={v.id} style={{
+                              background: 'rgba(255,255,255,0.03)',
+                              border: '1px solid rgba(255,255,255,0.06)',
+                              borderRadius: '12px', padding: '12px 16px',
+                              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                            }}>
+                              <div>
+                                <p style={{ color: 'white', fontSize: '13px', fontWeight: '600', margin: 0 }}>{v.department}</p>
+                                <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '11px', margin: '3px 0 0 0' }}>{date}</p>
+                              </div>
+                              <span style={{
+                                background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.2)',
+                                borderRadius: '8px', padding: '3px 10px',
+                                color: '#4ade80', fontSize: '12px', fontWeight: '700',
+                              }}>#{v.tokenNumber}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </motion.div>
+                  )}
                 </AnimatePresence>
               </div>
 

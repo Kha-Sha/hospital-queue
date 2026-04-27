@@ -7,6 +7,8 @@ function ParticleCanvas() {
 
   useEffect(() => {
     const canvas = canvasRef.current;
+    const isLowEnd = navigator.hardwareConcurrency <= 2 || window.innerWidth < 400;
+    if (isLowEnd) return;
     const ctx = canvas.getContext('2d');
     let animationId;
     let particles = [];
@@ -272,6 +274,35 @@ function Home() {
                 WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent'
               }}>{stat.number}</div>
               <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>{stat.label}</div>
+            </div>
+          ))}
+        </motion.div>
+
+        {/* Features */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 1.3 }}
+          style={{
+            display: 'flex', gap: '16px', justifyContent: 'center',
+            flexWrap: 'wrap', margin: '48px auto 0 auto', maxWidth: '860px'
+          }}
+        >
+          {[
+            { icon: '⚡', title: 'Real-time Queue', desc: "Patients track their turn live. No more crowding reception asking 'how long?'" },
+            { icon: '🏥', title: 'Multi-Department', desc: 'Separate queues for each department. Doctors manage their own patient flow.' },
+            { icon: '📱', title: 'Works on Any Phone', desc: 'Patients scan a QR code. No app download needed. Works instantly.' },
+          ].map((feature, i) => (
+            <div key={i} style={{
+              flex: '1 1 220px', maxWidth: '260px',
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: '20px', padding: '24px',
+              backdropFilter: 'blur(40px)', textAlign: 'left'
+            }}>
+              <div style={{ fontSize: '28px', marginBottom: '12px' }}>{feature.icon}</div>
+              <h3 style={{ color: 'white', fontSize: '15px', fontWeight: '700', margin: '0 0 8px 0' }}>{feature.title}</h3>
+              <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '13px', lineHeight: '1.6', margin: 0 }}>{feature.desc}</p>
             </div>
           ))}
         </motion.div>

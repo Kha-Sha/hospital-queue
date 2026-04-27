@@ -2,7 +2,7 @@ import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: "AIzaSyAu0dX5cb1s5e6KMfGMycMI9fRxdBu8EGA",
   authDomain: "hospital-queue-80a31.firebaseapp.com",
   projectId: "hospital-queue-80a31",
@@ -15,3 +15,8 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
+
+// TODO: prefix all collection paths with hospitalId for multi-hospital support
+export function getHospitalId() {
+  return localStorage.getItem('hospitalId') || 'default';
+}
