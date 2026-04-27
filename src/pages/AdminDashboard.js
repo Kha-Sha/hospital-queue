@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebase';
-import { signOut } from 'firebase/auth';
+import { signOut, createUserWithEmailAndPassword } from 'firebase/auth';
 import { collection, query, where, onSnapshot, doc, setDoc, updateDoc, getDocs, getDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { QRCodeCanvas as QRCode } from 'qrcode.react';
@@ -22,8 +22,13 @@ function AdminDashboard() {
   const [noshowCount, setNoshowCount] = useState(0);
   const [calling, setCalling] = useState(false);
   const [selectedDept, setSelectedDept] = useState('General OPD');
-  const [broadcastMsg, setBroadcastMsg] = useState('');
-  const [showBroadcast, setShowBroadcast] = useState(false);
+  const [showAddDoctor, setShowAddDoctor] = useState(false);
+  const [doctorName, setDoctorName] = useState('');
+  const [doctorPhone, setDoctorPhone] = useState('');
+  const [doctorPassword, setDoctorPassword] = useState('');
+  const [doctorDept, setDoctorDept] = useState('General OPD');
+  const [addingDoctor, setAddingDoctor] = useState(false);
+  const [doctorError, setDoctorError] = useState('');
 
   useEffect(() => {
     if (!auth.currentUser) { navigate('/admin-login'); return; }
@@ -100,11 +105,11 @@ function AdminDashboard() {
   };
 
   const callNextToken = async () => {
-    if (calling) return;
+    if (calling || queue.length === 0) return;
     setCalling(true);
-    const next = currentToken + 1;
-    await setDoc(doc(db, 'settings', 'hospital'), { currentToken: next }, { merge: true });
+    const next = Math.min(...queue.map(p => p.tokenNumber));
     const justCalled = queue.find(p => p.tokenNumber === next);
+    await setDoc(doc(db, 'settings', 'hospital'), { currentToken: next }, { merge: true });
     if (justCalled) {
       await updateDoc(doc(db, 'queue', justCalled.id), { status: 'completed' });
     }
@@ -115,11 +120,23 @@ function AdminDashboard() {
   const markNoShow = async (id) => await updateDoc(doc(db, 'queue', id), { status: 'noshow' });
   const handleLogout = async () => { await signOut(auth); navigate('/'); };
 
-  const sendBroadcast = async () => {
-    if (!broadcastMsg.trim()) return;
-    await setDoc(doc(db, 'settings', 'hospital'), { broadcast: broadcastMsg, broadcastTime: serverTimestamp() }, { merge: true });
-    setBroadcastMsg('');
-    setShowBroadcast(false);
+  const addDoctor = async (e) => {
+    e.preventDefault();
+    setDoctorError('');
+    setAddingDoctor(true);
+    try {
+      const credential = await createUserWithEmailAndPassword(auth, doctorPhone + '@hospital-doctor.com', doctorPassword);
+      await setDoc(doc(db, 'doctors', credential.user.uid), {
+        name: doctorName,
+        phone: doctorPhone,
+        department: doctorDept,
+      });
+      setDoctorName(''); setDoctorPhone(''); setDoctorPassword(''); setDoctorDept('General OPD');
+      setShowAddDoctor(false);
+    } catch (err) {
+      setDoctorError(err.message);
+    }
+    setAddingDoctor(false);
   };
 
   const filteredQueue = selectedDept === 'All' ? queue : queue.filter(p => p.department === selectedDept);
@@ -169,12 +186,12 @@ function AdminDashboard() {
             </p>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button onClick={() => setShowBroadcast(!showBroadcast)} style={{
-              background: 'rgba(251,191,36,0.1)',
-              border: '1px solid rgba(251,191,36,0.2)',
+            <button onClick={() => setShowAddDoctor(!showAddDoctor)} style={{
+              background: 'rgba(74,222,128,0.1)',
+              border: '1px solid rgba(74,222,128,0.2)',
               borderRadius: '8px', padding: '8px 16px',
-              cursor: 'pointer', color: '#fbbf24', fontSize: '13px', fontWeight: '600'
-            }}>📢 Broadcast</button>
+              cursor: 'pointer', color: '#4ade80', fontSize: '13px', fontWeight: '600'
+            }}>+ Add Doctor</button>
             <button onClick={handleLogout} style={{
               background: 'rgba(255,255,255,0.05)',
               border: '1px solid rgba(255,255,255,0.1)',
@@ -183,47 +200,6 @@ function AdminDashboard() {
             }}>Logout</button>
           </div>
         </motion.div>
-
-        {/* Broadcast panel */}
-        <AnimatePresence>
-          {showBroadcast && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              style={{
-                background: 'rgba(251,191,36,0.06)',
-                border: '1px solid rgba(251,191,36,0.15)',
-                borderRadius: '16px', padding: '20px', marginBottom: '16px'
-              }}
-            >
-              <p style={{ color: '#fbbf24', fontSize: '13px', marginBottom: '12px', fontWeight: '600' }}>
-                📢 Send message to all waiting patients
-              </p>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <input
-                  type="text"
-                  placeholder="e.g. Doctor will be 20 minutes late..."
-                  value={broadcastMsg}
-                  onChange={(e) => setBroadcastMsg(e.target.value)}
-                  style={{
-                    flex: 1, padding: '10px 14px',
-                    background: 'rgba(255,255,255,0.05)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: '8px', color: 'white', fontSize: '14px', outline: 'none'
-                  }}
-                />
-                <button onClick={sendBroadcast} style={{
-                  padding: '10px 20px',
-                  background: 'rgba(251,191,36,0.2)',
-                  border: '1px solid rgba(251,191,36,0.3)',
-                  borderRadius: '8px', color: '#fbbf24',
-                  cursor: 'pointer', fontWeight: '600', fontSize: '14px'
-                }}>Send</button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         {/* Stats */}
         <motion.div
@@ -447,6 +423,75 @@ function AdminDashboard() {
             )}
           </AnimatePresence>
         </motion.div>
+
+        {/* Add Doctor */}
+        <AnimatePresence>
+          {showAddDoctor && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              style={{
+                background: 'rgba(74,222,128,0.04)',
+                border: '1px solid rgba(74,222,128,0.12)',
+                borderRadius: '24px', padding: '24px', marginBottom: '16px', overflow: 'hidden'
+              }}
+            >
+              <h3 style={{ color: '#4ade80', margin: '0 0 20px 0', fontSize: '15px', fontWeight: '700' }}>
+                + Add Doctor Account
+              </h3>
+              <form onSubmit={addDoctor}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                  <input
+                    placeholder="Doctor Name"
+                    value={doctorName}
+                    onChange={e => setDoctorName(e.target.value)}
+                    required
+                    style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', fontSize: '14px', outline: 'none' }}
+                  />
+                  <input
+                    placeholder="Phone Number"
+                    value={doctorPhone}
+                    onChange={e => setDoctorPhone(e.target.value)}
+                    required
+                    style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', fontSize: '14px', outline: 'none' }}
+                  />
+                  <input
+                    placeholder="Password"
+                    type="password"
+                    value={doctorPassword}
+                    onChange={e => setDoctorPassword(e.target.value)}
+                    required
+                    style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', fontSize: '14px', outline: 'none' }}
+                  />
+                  <select
+                    value={doctorDept}
+                    onChange={e => setDoctorDept(e.target.value)}
+                    style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', fontSize: '14px', outline: 'none', cursor: 'pointer' }}
+                  >
+                    {DEPARTMENTS.map(dept => (
+                      <option key={dept} value={dept} style={{ background: '#0f1f3d' }}>{dept}</option>
+                    ))}
+                  </select>
+                </div>
+                {doctorError && (
+                  <p style={{ color: '#fca5a5', fontSize: '13px', marginBottom: '12px' }}>{doctorError}</p>
+                )}
+                <button
+                  type="submit"
+                  disabled={addingDoctor}
+                  style={{
+                    padding: '10px 24px', background: 'rgba(74,222,128,0.15)',
+                    border: '1px solid rgba(74,222,128,0.3)', borderRadius: '8px',
+                    color: '#4ade80', cursor: addingDoctor ? 'not-allowed' : 'pointer',
+                    fontWeight: '600', fontSize: '14px'
+                  }}>
+                  {addingDoctor ? 'Creating...' : 'Create Doctor Account'}
+                </button>
+              </form>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* QR Code */}
         <motion.div

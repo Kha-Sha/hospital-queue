@@ -36,8 +36,8 @@ function PatientDashboard() {
   const [quoteIndex, setQuoteIndex] = useState(0);
   const [quoteVisible, setQuoteVisible] = useState(true);
   const [isPending, setIsPending] = useState(false);
+  const [hasBeenSeen, setHasBeenSeen] = useState(false);
   const canvasRef = useRef(null);
-  const [broadcast, setBroadcast] = useState('');
   // Rotate quotes every 10 minutes
   useEffect(() => {
     const interval = setInterval(() => {
@@ -116,7 +116,6 @@ function PatientDashboard() {
     const unsubSettings = onSnapshot(settingsRef, (snap) => {
       if (snap.exists()) {
         setCurrentToken(snap.data().currentToken || 0);
-        setBroadcast(snap.data().broadcast || '');
       }
     });
 
@@ -132,10 +131,11 @@ function PatientDashboard() {
 
     const waitingQ = query(collection(db, 'queue'), where('status', '==', 'waiting'));
     const unsubWaiting = onSnapshot(waitingQ, (snapshot) => { setWaitingCount(snapshot.size); });
-   
+
 
     return () => { unsubSettings(); unsubQueue(); unsubWaiting(); unsubPending(); };
   }, [navigate]);
+
 
 
 
@@ -203,6 +203,55 @@ function PatientDashboard() {
     </motion.div>
   </div>
 );
+
+  if (hasBeenSeen) return (
+    <div style={{
+      minHeight: '100vh',
+      background: 'radial-gradient(ellipse at 20% 50%, #0f1f3d 0%, #060d1a 60%, #0a0a0f 100%)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontFamily: "'Segoe UI', sans-serif", padding: '20px'
+    }}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+        style={{
+          background: 'rgba(255,255,255,0.04)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: '28px', padding: '52px 40px',
+          backdropFilter: 'blur(40px)',
+          boxShadow: '0 32px 64px rgba(0,0,0,0.6)',
+          textAlign: 'center', maxWidth: '400px', width: '100%'
+        }}
+      >
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
+          style={{
+            width: '80px', height: '80px', borderRadius: '50%',
+            background: 'linear-gradient(135deg, rgba(34,197,94,0.2), rgba(74,222,128,0.1))',
+            border: '1px solid rgba(74,222,128,0.3)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            margin: '0 auto 28px auto', fontSize: '36px'
+          }}
+        >✓</motion.div>
+        <h2 style={{ color: 'white', fontSize: '28px', fontWeight: '700', marginBottom: '12px' }}>
+          You're all set!
+        </h2>
+        <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '15px', lineHeight: '1.7', marginBottom: '32px' }}>
+          Get well soon{patientName ? `, ${patientName}` : ''}. Take care of yourself.
+        </p>
+        <button onClick={handleLogout} style={{
+          padding: '12px 32px',
+          background: 'rgba(255,255,255,0.06)',
+          border: '1px solid rgba(255,255,255,0.1)',
+          borderRadius: '12px', color: 'rgba(255,255,255,0.5)',
+          cursor: 'pointer', fontSize: '14px'
+        }}>Logout</button>
+      </motion.div>
+    </div>
+  );
 
   const currentQuote = QUOTES[quoteIndex];
 
@@ -311,24 +360,6 @@ function PatientDashboard() {
                   </p>
                 </div>
               </div>
-              {broadcast && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  style={{
-                    background: 'rgba(251,191,36,0.08)',
-                    border: '1px solid rgba(251,191,36,0.2)',
-                    borderRadius: '14px', padding: '14px 18px',
-                    marginBottom: '16px',
-                    display: 'flex', alignItems: 'center', gap: '12px'
-                  }}>
-                  <span style={{ fontSize: '20px' }}>📢</span>
-                  <p style={{ color: '#fbbf24', fontSize: '14px', fontWeight: '600', margin: 0 }}>
-                    {broadcast}
-                  </p>
-                </motion.div>
-              )}
-
               {/* Quote card - shown before checkin */}
               <motion.div
                 initial={{ opacity: 0 }}
@@ -401,9 +432,20 @@ function PatientDashboard() {
                     <div style={{ fontSize: '88px', fontWeight: '900', color: 'white', lineHeight: 1, marginBottom: '12px' }}>
                       {tokenNumber}
                     </div>
-                    <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '15px' }}>
+                    <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '15px', marginBottom: '20px' }}>
                       Please proceed to the doctor's room
                     </p>
+                    <button
+                      onClick={() => setHasBeenSeen(true)}
+                      style={{
+                        padding: '12px 28px',
+                        background: 'rgba(255,255,255,0.15)',
+                        border: '1px solid rgba(255,255,255,0.25)',
+                        borderRadius: '12px', color: 'white',
+                        cursor: 'pointer', fontSize: '15px', fontWeight: '600'
+                      }}>
+                      I'm on my way →
+                    </button>
                   </motion.div>
                 ) : (
                   <>

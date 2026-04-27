@@ -72,10 +72,23 @@ function PatientLogin() {
       const user = userCredential.user;
 
       // Get patient info
-      const { getDoc, doc, setDoc } = await import('firebase/firestore');
+      const { getDoc, doc, setDoc, getDocs, collection, query, where } = await import('firebase/firestore');
       const { db } = await import('../firebase');
       const patientSnap = await getDoc(doc(db, 'patients', user.uid));
       const patientData = patientSnap.exists() ? patientSnap.data() : {};
+
+      // If already pending or already waiting, skip straight to dashboard
+      const pendingSnap = await getDoc(doc(db, 'pending', user.uid));
+      if (pendingSnap.exists() && pendingSnap.data().status === 'pending') {
+        navigate('/patient-dashboard');
+        return;
+      }
+      const existingQ = query(collection(db, 'queue'), where('userId', '==', user.uid), where('status', '==', 'waiting'));
+      const existingSnap = await getDocs(existingQ);
+      if (!existingSnap.empty) {
+        navigate('/patient-dashboard');
+        return;
+      }
 
       // Create pending record so receptionist can assign department
       await setDoc(doc(db, 'pending', user.uid), {
