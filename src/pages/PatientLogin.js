@@ -81,12 +81,12 @@ function PatientLogin() {
     }
 
     try {
-      const { getDoc, doc, setDoc, getDocs, collection, query, where, deleteDoc } = await import('firebase/firestore');
+      const { getDoc, doc, setDoc, getDocs, collection, query, where } = await import('firebase/firestore');
       const { db } = await import('../firebase');
       const patientSnap = await getDoc(doc(db, 'patients', user.uid));
       const patientData = patientSnap.exists() ? patientSnap.data() : {};
 
-      // 1. Already has a waiting token
+      // 1. Already has a waiting token — go straight to dashboard
       const existingQ = query(collection(db, 'queue'), where('userId', '==', user.uid), where('status', '==', 'waiting'));
       const existingSnap = await getDocs(existingQ);
       if (!existingSnap.empty) {
@@ -94,21 +94,16 @@ function PatientLogin() {
         setLoading(false);
         return;
       }
-      // 2. Already in pending flow (pending = awaiting assignment, assigned = token issued today)
+
+      // 2. Already waiting for receptionist — go straight to dashboard
       const pendingSnap = await getDoc(doc(db, 'pending', user.uid));
-      if (pendingSnap.exists()) {
-        const pending = pendingSnap.data();
-        const isToday = new Date(pending.arrivedAt?.toDate()).toDateString() === new Date().toDateString();
-        if (!isToday) {
-          await deleteDoc(doc(db, 'pending', user.uid));
-        } else if (pending.status === 'pending' || pending.status === 'assigned') {
-          navigate('/patient-dashboard');
-          setLoading(false);
-          return;
-        }
+      if (pendingSnap.exists() && pendingSnap.data().status === 'pending') {
+        navigate('/patient-dashboard');
+        setLoading(false);
+        return;
       }
 
-      // Create pending record so receptionist can assign department
+      // 3. All other cases (completed, noshow, assigned, or first visit) — create fresh pending
       await setDoc(doc(db, 'pending', user.uid), {
         name: patientData.name || phone,
         phone: patientData.phone || phone,
