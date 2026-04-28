@@ -157,8 +157,19 @@ function PatientDashboard() {
           setShowReceipt(true);
         }
       } else {
+        setTokenNumber(prev => {
+          if (prev !== null) {
+            setCurrentToken(curr => {
+              if (curr >= prev) {
+                localStorage.setItem('qalm_seen_' + auth.currentUser.uid, 'true');
+                setHasBeenSeen(true);
+              }
+              return curr;
+            });
+          }
+          return null;
+        });
         setCheckedIn(false);
-        setTokenNumber(null);
         setPatientDepartment('');
       }
     });
