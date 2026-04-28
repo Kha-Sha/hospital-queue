@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { auth, db, firebaseConfig } from '../firebase';
 import { signOut, createUserWithEmailAndPassword, getAuth } from 'firebase/auth';
 import { initializeApp } from 'firebase/app';
-import { collection, query, where, onSnapshot, doc, setDoc, updateDoc, getDocs, getDoc, addDoc, serverTimestamp, deleteDoc, runTransaction } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, setDoc, updateDoc, getDocs, getDoc, serverTimestamp, deleteDoc, runTransaction } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { QRCodeCanvas as QRCode } from 'qrcode.react';
 
