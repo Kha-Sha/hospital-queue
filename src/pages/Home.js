@@ -7,6 +7,7 @@ function ParticleCanvas() {
 
   useEffect(() => {
     const canvas = canvasRef.current;
+    if (!canvas) return;
     const isLowEnd = navigator.hardwareConcurrency <= 2 || window.innerWidth < 400;
     if (isLowEnd) return;
     const ctx = canvas.getContext('2d');

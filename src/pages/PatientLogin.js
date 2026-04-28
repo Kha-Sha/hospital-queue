@@ -14,7 +14,12 @@ function PatientLogin() {
   const canvasRef = useRef(null);
 
   useEffect(() => {
+    if (auth.currentUser) { navigate('/patient-dashboard'); return; }
+  }, [navigate]);
+
+  useEffect(() => {
     const canvas = canvasRef.current;
+    if (!canvas) return;
     const isLowEnd = navigator.hardwareConcurrency <= 2 || window.innerWidth < 400;
     if (isLowEnd) return;
     const ctx = canvas.getContext('2d');
@@ -81,7 +86,7 @@ function PatientLogin() {
     }
 
     try {
-      const { getDoc, doc, setDoc, getDocs, collection, query, where } = await import('firebase/firestore');
+      const { getDoc, doc, setDoc, getDocs, collection, query, where, serverTimestamp } = await import('firebase/firestore');
       const { db } = await import('../firebase');
       const patientSnap = await getDoc(doc(db, 'patients', user.uid));
       const patientData = patientSnap.exists() ? patientSnap.data() : {};
@@ -109,7 +114,7 @@ function PatientLogin() {
         phone: patientData.phone || phone,
         userId: user.uid,
         status: 'pending',
-        arrivedAt: new Date(),
+        arrivedAt: serverTimestamp(),
       });
     } catch (err) {
       console.error('Firestore error during login flow:', err);

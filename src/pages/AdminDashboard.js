@@ -6,12 +6,7 @@ import { initializeApp } from 'firebase/app';
 import { collection, query, where, onSnapshot, doc, setDoc, updateDoc, getDocs, getDoc, serverTimestamp, deleteDoc, runTransaction } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { QRCodeCanvas as QRCode } from 'qrcode.react';
-
-const DEPARTMENTS = [
-  'General OPD', 'Paediatrics', 'Cardiology', 'Orthopaedics',
-  'Gynaecology', 'Dermatology', 'ENT', 'Ophthalmology',
-  'Neurology', 'Psychiatry', 'Dental', 'Radiology', 'Pathology/Lab'
-];
+import { DEPARTMENTS } from '../constants';
 
 const QR_URL = 'https://hospital-queue-kappa.vercel.app/patient-register';
 

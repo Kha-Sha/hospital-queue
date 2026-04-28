@@ -2,14 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { motion } from 'framer-motion';
-
-const ALL_DEPARTMENTS = [
-  'General OPD', 'Paediatrics', 'Cardiology', 'Orthopaedics',
-  'Gynaecology', 'Dermatology', 'ENT', 'Ophthalmology',
-  'Neurology', 'Psychiatry', 'Dental', 'Radiology', 'Pathology/Lab'
-];
+import { DEPARTMENTS as ALL_DEPARTMENTS } from '../constants';
 
 function PatientRegister() {
   const navigate = useNavigate();
@@ -33,6 +28,7 @@ function PatientRegister() {
 
   useEffect(() => {
     const canvas = canvasRef.current;
+    if (!canvas) return;
     const isLowEnd = navigator.hardwareConcurrency <= 2 || window.innerWidth < 400;
     if (isLowEnd) return;
     const ctx = canvas.getContext('2d');
@@ -88,7 +84,7 @@ function PatientRegister() {
         phone,
         userId: userCredential.user.uid,
         status: 'pending',
-        arrivedAt: new Date(),
+        arrivedAt: serverTimestamp(),
         ...(preferredDept ? { preferredDept } : {}),
       });
       navigate('/patient-dashboard');

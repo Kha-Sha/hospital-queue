@@ -113,11 +113,13 @@ function DoctorDashboard() {
     if (calling || !nextToken) return;
     setCalling(true);
     try {
-      const next = currentToken + 1;
-      await setDoc(doc(db, 'departments', department), { currentToken: next }, { merge: true });
+      await setDoc(doc(db, 'departments', department), { currentToken: nextToken.tokenNumber }, { merge: true });
       await updateDoc(doc(db, 'queue', nextToken.id), { status: 'completed' });
-    } catch (err) { console.error(err); }
-    setTimeout(() => setCalling(false), 1000);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setTimeout(() => setCalling(false), 1000);
+    }
   };
 
   const handleLogout = async () => { await signOut(auth); navigate('/'); };

@@ -59,6 +59,7 @@ function PatientDashboard() {
   const [showReceipt, setShowReceipt] = useState(false); // tokenReceipt
   const [checkInTimeLocal, setCheckInTimeLocal] = useState(null); // tokenReceipt
   const receiptShownRef = useRef(false); // tokenReceipt
+  const wasBeingCalled = useRef(false);
   const canvasRef = useRef(null);
   // Rotate quotes every 10 minutes
   useEffect(() => {
@@ -139,7 +140,6 @@ function PatientDashboard() {
     const settingsRef = doc(db, 'settings', 'hospital');
     const unsubSettings = onSnapshot(settingsRef, (snap) => {
       if (snap.exists()) {
-        setCurrentToken(snap.data().currentToken || 0);
         setHospitalName(snap.data().hospitalName || '');
       }
     });
@@ -148,7 +148,8 @@ function PatientDashboard() {
     const unsubQueue = onSnapshot(q, (snapshot) => {
       if (!snapshot.empty) {
         const data = snapshot.docs[0].data();
-        setTokenNumber(data.tokenNumber);
+        const token = data.tokenNumber;
+        setTokenNumber(token);
         setPatientDepartment(data.department || '');
         setCheckedIn(true);
         if (!receiptShownRef.current) { // tokenReceipt: show once on first assignment
@@ -157,20 +158,15 @@ function PatientDashboard() {
           setShowReceipt(true);
         }
       } else {
-        setTokenNumber(prev => {
-          if (prev !== null) {
-            setCurrentToken(curr => {
-              if (curr >= prev) {
-                localStorage.setItem('qalm_seen_' + auth.currentUser.uid, 'true');
-                setHasBeenSeen(true);
-              }
-              return curr;
-            });
-          }
-          return null;
-        });
-        setCheckedIn(false);
-        setPatientDepartment('');
+        if (wasBeingCalled.current) {
+          // Patient was just called — keep alert screen visible until they tap "I'm on my way"
+          // Don't reset tokenNumber or checkedIn; isBeingCalled stays true so the red alert remains
+          setPatientDepartment('');
+        } else {
+          setCheckedIn(false);
+          setTokenNumber(null);
+          setPatientDepartment('');
+        }
       }
     });
 
@@ -196,6 +192,7 @@ function PatientDashboard() {
 
   useEffect(() => {
     if (isBeingCalled) {
+      wasBeingCalled.current = true;
       playNotificationSound();
       if (navigator.vibrate) {
         navigator.vibrate([500, 200, 500, 200, 500]);
@@ -449,6 +446,8 @@ function PatientDashboard() {
                       onClick={() => {
                         localStorage.setItem('qalm_seen_' + auth.currentUser.uid, 'true');
                         setHasBeenSeen(true);
+                        setCheckedIn(false);
+                        wasBeingCalled.current = false;
                       }}
                       style={{
                         padding: '12px 28px',

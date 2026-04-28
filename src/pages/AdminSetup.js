@@ -3,12 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
-
-const DEPARTMENTS = [
-  'General OPD', 'Paediatrics', 'Cardiology', 'Orthopaedics',
-  'Gynaecology', 'Dermatology', 'ENT', 'Ophthalmology',
-  'Neurology', 'Psychiatry', 'Dental', 'Radiology', 'Pathology/Lab'
-];
+import { DEPARTMENTS } from '../constants';
 
 function AdminSetup() {
   const navigate = useNavigate();
@@ -16,6 +11,7 @@ function AdminSetup() {
   const [hospitalName, setHospitalName] = useState('');
   const [activeDepts, setActiveDepts] = useState(new Set(DEPARTMENTS));
   const [saving, setSaving] = useState(false);
+  const [setupError, setSetupError] = useState('');
 
   useEffect(() => {
     if (!auth.currentUser) { navigate('/admin-login'); return; }
@@ -33,6 +29,7 @@ function AdminSetup() {
   const handleFinish = async () => {
     if (!hospitalName.trim()) return;
     setSaving(true);
+    setSetupError('');
     try {
       const today = new Date().toDateString();
       await setDoc(doc(db, 'settings', 'hospital'), {
@@ -47,9 +44,10 @@ function AdminSetup() {
       }
       setStep(3);
     } catch (err) {
-      console.error(err);
+      setSetupError('Failed to save settings. Please check your connection and try again.');
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   const StepDot = ({ n }) => (
@@ -197,6 +195,12 @@ function AdminSetup() {
               <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: '12px', marginBottom: '20px' }}>
                 {activeDepts.size} of {DEPARTMENTS.length} departments active
               </p>
+
+              {setupError && (
+                <p style={{ color: '#fca5a5', fontSize: '13px', textAlign: 'center', marginBottom: '16px' }}>
+                  {setupError}
+                </p>
+              )}
 
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button
