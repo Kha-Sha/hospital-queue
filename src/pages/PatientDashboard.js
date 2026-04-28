@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebase';
 import { signOut } from 'firebase/auth';
-import { doc, getDoc, getDocs, collection, query, where, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, getDocs, collection, query, where, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 
 function playNotificationSound() {
@@ -58,6 +58,8 @@ function PatientDashboard() {
   const [tokensAhead, setTokensAhead] = useState(0); // tokensAhead accurate count
   const [showReceipt, setShowReceipt] = useState(false); // tokenReceipt
   const [checkInTimeLocal, setCheckInTimeLocal] = useState(null); // tokenReceipt
+  const [queuePaused, setQueuePaused] = useState(false);
+  const [assignedDoctor, setAssignedDoctor] = useState('');
   const receiptShownRef = useRef(false); // tokenReceipt
   const wasBeingCalled = useRef(false);
   const canvasRef = useRef(null);
@@ -141,6 +143,7 @@ function PatientDashboard() {
     const unsubSettings = onSnapshot(settingsRef, (snap) => {
       if (snap.exists()) {
         setHospitalName(snap.data().hospitalName || '');
+        setQueuePaused(snap.data().queuePaused || false);
       }
     });
 
@@ -181,6 +184,20 @@ function PatientDashboard() {
     await signOut(auth);
     navigate('/');
   };
+
+  const leaveQueue = async () => {
+    if (!window.confirm('Are you sure you want to leave the queue? Your token will be cancelled.')) return;
+    try {
+      const snap = await getDocs(query(collection(db, 'queue'), where('userId', '==', auth.currentUser.uid), where('status', '==', 'waiting')));
+      await Promise.all(snap.docs.map(d => updateDoc(doc(db, 'queue', d.id), { status: 'cancelled' })));
+      await deleteDoc(doc(db, 'pending', auth.currentUser.uid));
+      localStorage.removeItem('qalm_seen_' + auth.currentUser.uid);
+      setCheckedIn(false);
+      setTokenNumber(null);
+      setPatientDepartment('');
+    } catch (_) {}
+  };
+
   const estimatedWait = tokensAhead * 10;
   const isBeingCalled = currentToken === tokenNumber && tokenNumber !== null;
   const estimatedTime = (() => {
@@ -236,6 +253,16 @@ function PatientDashboard() {
     };
     fetchHistory();
   }, [showHistory]);
+
+  useEffect(() => {
+    if (!patientDepartment) { setAssignedDoctor(''); return; }
+    const fetchDoctor = async () => {
+      const snap = await getDocs(query(collection(db, 'doctors'), where('department', '==', patientDepartment)));
+      if (!snap.empty) setAssignedDoctor(snap.docs[0].data().name || '');
+      else setAssignedDoctor('');
+    };
+    fetchDoctor();
+  }, [patientDepartment]);
 
   if (loading) return (
     <div style={{
@@ -480,6 +507,11 @@ function PatientDashboard() {
                         color: 'white', fontSize: '13px', fontWeight: '500'
                       }}>{patientDepartment}</span>
                     )}
+                    {assignedDoctor && (
+                      <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '13px', marginTop: '8px', marginBottom: 0 }}>
+                        Dr. {assignedDoctor}
+                      </p>
+                    )}
                   </>
                 )}
               </motion.div>
@@ -529,6 +561,17 @@ function PatientDashboard() {
                 )}
               </AnimatePresence>
 
+              {/* Pause banner */}
+              {queuePaused && !isBeingCalled && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                  style={{ background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.15)', borderRadius: '14px', padding: '14px 16px', textAlign: 'center', marginBottom: '16px' }}>
+                  <p style={{ color: '#fbbf24', fontWeight: '600', fontSize: '14px', margin: 0 }}>
+                    ⏸ Queue is temporarily paused. Please wait — we'll resume shortly.
+                  </p>
+                </motion.div>
+              )}
+
               {/* Stats */}
               <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 400 ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: '10px', marginBottom: '16px' }}>
                 {[
@@ -548,6 +591,23 @@ function PatientDashboard() {
                   </div>
                 ))}
               </div>
+
+              {/* Leave Queue */}
+              {!isBeingCalled && (
+                <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+                  <button
+                    onClick={leaveQueue}
+                    style={{
+                      padding: '10px 24px',
+                      background: 'rgba(239,68,68,0.08)',
+                      border: '1px solid rgba(239,68,68,0.2)',
+                      borderRadius: '10px', color: '#f87171',
+                      cursor: 'pointer', fontSize: '13px', fontWeight: '600',
+                    }}>
+                    Leave Queue
+                  </button>
+                </div>
+              )}
 
               {/* Next up warning */}
               {isNextUp && !isBeingCalled && (

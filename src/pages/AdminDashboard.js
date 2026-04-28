@@ -31,6 +31,14 @@ function AdminDashboard() {
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [activeDepartments, setActiveDepartments] = useState(DEPARTMENTS); // activeDepartments
   const [searchQuery, setSearchQuery] = useState('');
+  const [queuePaused, setQueuePaused] = useState(false);
+  const [showStaffMgmt, setShowStaffMgmt] = useState(false);
+  const [staffName, setStaffName] = useState('');
+  const [staffPhone, setStaffPhone] = useState('');
+  const [staffPassword, setStaffPassword] = useState('');
+  const [addingStaff, setAddingStaff] = useState(false);
+  const [staffError, setStaffError] = useState('');
+  const [adminsList, setAdminsList] = useState([]);
 
   useEffect(() => {
     if (!auth.currentUser) { navigate('/admin-login'); return; }
@@ -59,6 +67,7 @@ function AdminDashboard() {
       if (snap.exists()) {
         setCurrentToken(snap.data().currentToken || 0);
         setHospitalName(snap.data().hospitalName || 'Your Hospital');
+        setQueuePaused(snap.data().queuePaused || false);
         if (snap.data().activeDepartments?.length) {
           setActiveDepartments(snap.data().activeDepartments); // activeDepartments
         }
@@ -78,8 +87,11 @@ function AdminDashboard() {
 
     const unsubCompleted = onSnapshot(query(collection(db, 'queue'), where('status', '==', 'completed')), (snap) => setCompletedCount(snap.size));
     const unsubNoshow = onSnapshot(query(collection(db, 'queue'), where('status', '==', 'noshow')), (snap) => setNoshowCount(snap.size));
+    const unsubAdmins = onSnapshot(collection(db, 'admins'), (snap) => {
+      setAdminsList(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
 
-    return () => { unsubSettings(); unsubPending(); unsubWaiting(); unsubCompleted(); unsubNoshow(); };
+    return () => { unsubSettings(); unsubPending(); unsubWaiting(); unsubCompleted(); unsubNoshow(); unsubAdmins(); };
   }, [navigate]);
 
   // departmentTabs: auto-switch to All when selected dept becomes empty
@@ -147,6 +159,37 @@ function AdminDashboard() {
       await secondaryApp.delete();
     }
     setAddingDoctor(false);
+  };
+
+  const togglePause = async () => {
+    await setDoc(doc(db, 'settings', 'hospital'), { queuePaused: !queuePaused }, { merge: true });
+  };
+
+  const prioritizePatient = async (patient) => {
+    const lowestToken = queue.length > 0 ? queue[0].tokenNumber : 1;
+    await updateDoc(doc(db, 'queue', patient.id), { tokenNumber: lowestToken - 0.5 });
+  };
+
+  const addStaff = async (e) => {
+    e.preventDefault();
+    setStaffError('');
+    setAddingStaff(true);
+    const secondaryApp = initializeApp(firebaseConfig, `secondary-staff-${Date.now()}`);
+    const secondaryAuth = getAuth(secondaryApp);
+    try {
+      const credential = await createUserWithEmailAndPassword(secondaryAuth, staffPhone + '@hospital-admin.com', staffPassword);
+      await setDoc(doc(db, 'admins', credential.user.uid), {
+        name: staffName, phone: staffPhone,
+        hospitalId: auth.currentUser.uid,
+        createdAt: serverTimestamp(),
+      });
+      setStaffName(''); setStaffPhone(''); setStaffPassword('');
+    } catch (err) {
+      setStaffError(err.message);
+    } finally {
+      await secondaryApp.delete();
+      setAddingStaff(false);
+    }
   };
 
   // printQR: open print window with QR code
@@ -219,11 +262,26 @@ function AdminDashboard() {
           </div>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <button onClick={() => setShowAnalytics(a => !a)} style={{ background: showAnalytics ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.1)', border: `1px solid ${showAnalytics ? 'rgba(129,140,248,0.4)' : 'rgba(99,102,241,0.2)'}`, borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', color: '#818cf8', fontSize: '13px', fontWeight: '600' }}>📊 Analytics</button>
+            <button onClick={togglePause} style={{ background: queuePaused ? 'rgba(251,191,36,0.2)' : 'rgba(251,191,36,0.1)', border: `1px solid ${queuePaused ? 'rgba(251,191,36,0.4)' : 'rgba(251,191,36,0.2)'}`, borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', color: '#fbbf24', fontSize: '13px', fontWeight: '600' }}>{queuePaused ? '▶ Resume' : '⏸ Pause'}</button>
             <button onClick={() => setShowAddDoctor(!showAddDoctor)} style={{ background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', color: '#4ade80', fontSize: '13px', fontWeight: '600' }}>+ Add Doctor</button>
             <button onClick={resetQueue} style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', color: '#f87171', fontSize: '13px', fontWeight: '600' }}>Reset Queue</button>
             <button onClick={handleLogout} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', color: 'rgba(255,255,255,0.5)', fontSize: '13px' }}>Logout</button>
           </div>
         </motion.div>
+
+        {/* Pause banner */}
+        <AnimatePresence>
+          {queuePaused && (
+            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}
+              style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)', borderRadius: '16px', padding: '14px 20px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{ fontSize: '18px' }}>⏸</span>
+              <div>
+                <p style={{ color: '#fbbf24', fontWeight: '700', fontSize: '14px', margin: 0 }}>Queue is paused</p>
+                <p style={{ color: 'rgba(251,191,36,0.6)', fontSize: '12px', margin: '2px 0 0 0' }}>Patients will see a pause notice. Click Resume when ready.</p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Stats */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
@@ -386,7 +444,8 @@ function AdminDashboard() {
                       </p>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '8px' }}>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <button onClick={() => prioritizePatient(patient)} style={{ padding: '7px 14px', background: 'rgba(168,85,247,0.1)', color: '#a855f7', border: '1px solid rgba(168,85,247,0.2)', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>⬆ Priority</button>
                     <button onClick={() => markComplete(patient.id)} style={{ padding: '7px 14px', background: 'rgba(74,222,128,0.1)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.2)', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>✓ Done</button>
                     <button onClick={() => markNoShow(patient.id)} style={{ padding: '7px 14px', background: 'rgba(251,191,36,0.08)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.15)', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>✗ No Show</button>
                   </div>
@@ -421,6 +480,50 @@ function AdminDashboard() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Staff Management */}
+        <div style={{ marginBottom: '16px' }}>
+          <button onClick={() => setShowStaffMgmt(s => !s)} style={{ width: '100%', padding: '14px 20px', background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)', borderRadius: showStaffMgmt ? '16px 16px 0 0' : '16px', color: '#818cf8', cursor: 'pointer', fontSize: '14px', fontWeight: '600', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>👥 Staff Management</span>
+            <span>{showStaffMgmt ? '▲' : '▼'}</span>
+          </button>
+          <AnimatePresence>
+            {showStaffMgmt && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} style={{ overflow: 'hidden' }}>
+                <div style={{ background: 'rgba(99,102,241,0.04)', border: '1px solid rgba(99,102,241,0.15)', borderTop: 'none', borderRadius: '0 0 16px 16px', padding: '24px' }}>
+                  <h3 style={{ color: '#818cf8', margin: '0 0 16px 0', fontSize: '15px', fontWeight: '700' }}>Add Admin Account</h3>
+                  <form onSubmit={addStaff}>
+                    <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 600 ? '1fr' : '1fr 1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                      <input placeholder="Staff Name" value={staffName} onChange={e => setStaffName(e.target.value)} required style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', fontSize: '14px', outline: 'none' }} />
+                      <input placeholder="Phone Number" value={staffPhone} onChange={e => setStaffPhone(e.target.value)} required style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', fontSize: '14px', outline: 'none' }} />
+                      <input placeholder="Password" type="password" value={staffPassword} onChange={e => setStaffPassword(e.target.value)} required style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', fontSize: '14px', outline: 'none' }} />
+                    </div>
+                    {staffError && <p style={{ color: '#fca5a5', fontSize: '13px', marginBottom: '12px' }}>{staffError}</p>}
+                    <button type="submit" disabled={addingStaff} style={{ padding: '10px 24px', background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '8px', color: '#818cf8', cursor: addingStaff ? 'not-allowed' : 'pointer', fontWeight: '600', fontSize: '14px' }}>
+                      {addingStaff ? 'Creating...' : 'Create Admin Account'}
+                    </button>
+                  </form>
+                  {adminsList.length > 0 && (
+                    <div style={{ marginTop: '20px' }}>
+                      <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '10px' }}>Existing Admin Staff ({adminsList.length})</p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {adminsList.map(admin => (
+                          <div key={admin.id} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '10px', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                              <p style={{ color: 'white', fontSize: '14px', fontWeight: '600', margin: 0 }}>{admin.name}</p>
+                              <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '12px', margin: '2px 0 0 0' }}>{admin.phone}</p>
+                            </div>
+                            <span style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: '6px', padding: '3px 10px', color: '#818cf8', fontSize: '12px', fontWeight: '600' }}>Admin</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
         {/* QR Code + printQR button */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}
