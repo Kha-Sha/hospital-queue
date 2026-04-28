@@ -30,6 +30,7 @@ function AdminDashboard() {
   const [editingName, setEditingName] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [activeDepartments, setActiveDepartments] = useState(DEPARTMENTS); // activeDepartments
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     if (!auth.currentUser) { navigate('/admin-login'); return; }
@@ -165,7 +166,18 @@ function AdminDashboard() {
   const busiestDept = Object.entries(deptCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '—';
 
   const activeDeptTabs = ['All', ...Object.keys(deptCounts).sort()]; // departmentTabs
-  const filteredQueue = selectedDept === 'All' ? queue : queue.filter(p => p.department === selectedDept);
+  const filteredQueue = queue
+    .filter(p => selectedDept === 'All' || p.department === selectedDept)
+    .filter(p => {
+      if (!searchQuery) return true;
+      const q = searchQuery.toLowerCase();
+      return (p.name || '').toLowerCase().includes(q) || (p.phone || '').toLowerCase().includes(q);
+    });
+  const filteredPending = pendingPatients.filter(p => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return (p.name || '').toLowerCase().includes(q) || (p.phone || '').toLowerCase().includes(q);
+  });
 
   return (
     <div style={{
@@ -261,10 +273,12 @@ function AdminDashboard() {
               style={{ background: 'rgba(251,191,36,0.04)', border: '1px solid rgba(251,191,36,0.12)', borderRadius: '24px', overflow: 'hidden', backdropFilter: 'blur(20px)', marginBottom: '16px' }}>
               <div style={{ padding: '16px 24px', borderBottom: '1px solid rgba(251,191,36,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h3 style={{ color: '#fbbf24', margin: 0, fontSize: '15px', fontWeight: '700' }}>⏳ New Arrivals — Assign Department</h3>
-                <span style={{ background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.2)', borderRadius: '20px', padding: '4px 12px', color: '#fbbf24', fontSize: '13px', fontWeight: '600' }}>{pendingPatients.length} waiting</span>
+                <span style={{ background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.2)', borderRadius: '20px', padding: '4px 12px', color: '#fbbf24', fontSize: '13px', fontWeight: '600' }}>
+                  {searchQuery && filteredPending.length !== pendingPatients.length ? `${filteredPending.length} of ${pendingPatients.length}` : `${pendingPatients.length}`} waiting
+                </span>
               </div>
-              {pendingPatients.map((patient, index) => (
-                <div key={patient.id} style={{ padding: '16px 24px', borderBottom: index < pendingPatients.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+              {filteredPending.map((patient, index) => (
+                <div key={patient.id} style={{ padding: '16px 24px', borderBottom: index < filteredPending.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                   <div>
                     <p style={{ color: 'white', fontWeight: '600', fontSize: '15px', margin: 0 }}>{patient.name}</p>
                     <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '12px', margin: '4px 0 0 0' }}>
@@ -288,6 +302,28 @@ function AdminDashboard() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Search */}
+        <div style={{ marginBottom: '16px' }}>
+          <input
+            type="text"
+            placeholder="🔍  Search patient by name or phone..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '12px 16px',
+              background: 'rgba(255,255,255,0.05)',
+              border: `1px solid ${searchQuery ? 'rgba(96,165,250,0.35)' : 'rgba(255,255,255,0.08)'}`,
+              borderRadius: '12px',
+              fontSize: '14px',
+              color: 'white',
+              boxSizing: 'border-box',
+              outline: 'none',
+              transition: 'border-color 0.2s',
+            }}
+          />
+        </div>
 
         {/* departmentTabs: tab-style, only depts with waiting patients */}
         <div style={{ marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '12px', display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
@@ -337,7 +373,14 @@ function AdminDashboard() {
                       {patient.tokenNumber}
                     </div>
                     <div>
-                      <p style={{ margin: 0, fontWeight: '600', color: 'white', fontSize: '15px' }}>{patient.name || 'Patient'}</p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <p style={{ margin: 0, fontWeight: '600', color: 'white', fontSize: '15px' }}>{patient.name || 'Patient'}</p>
+                        {searchQuery && (
+                          <span style={{ background: 'rgba(37,99,235,0.25)', border: '1px solid rgba(37,99,235,0.45)', borderRadius: '20px', padding: '2px 10px', fontSize: '12px', color: '#93c5fd', fontWeight: '700', whiteSpace: 'nowrap' }}>
+                            Token {patient.tokenNumber}
+                          </span>
+                        )}
+                      </div>
                       <p style={{ margin: 0, fontSize: '12px', color: 'rgba(255,255,255,0.25)', marginTop: '2px' }}>
                         {patient.department} — {isCalled ? '🔴 Called' : index === 0 ? '🟢 Next up' : `Position ${index + 1}`}
                       </p>
