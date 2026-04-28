@@ -23,7 +23,6 @@ function AdminDashboard() {
   const [waitingCount, setWaitingCount] = useState(0);
   const [completedCount, setCompletedCount] = useState(0);
   const [noshowCount, setNoshowCount] = useState(0);
-  const [calling, setCalling] = useState(false);
   const [selectedDept, setSelectedDept] = useState('All');
   const [showAddDoctor, setShowAddDoctor] = useState(false);
   const [doctorName, setDoctorName] = useState('');
@@ -36,10 +35,6 @@ function AdminDashboard() {
   const [editingName, setEditingName] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [activeDepartments, setActiveDepartments] = useState(DEPARTMENTS); // activeDepartments
-  const [lastCalledAt, setLastCalledAt] = useState(null); // autoNoShow
-  const [lastCalledId, setLastCalledId] = useState(null); // autoNoShow
-  const [lastCalledToken, setLastCalledToken] = useState(null); // autoNoShow
-  const [autoNoShowToast, setAutoNoShowToast] = useState(''); // autoNoShow
 
   useEffect(() => {
     if (!auth.currentUser) { navigate('/admin-login'); return; }
@@ -90,23 +85,6 @@ function AdminDashboard() {
 
     return () => { unsubSettings(); unsubPending(); unsubWaiting(); unsubCompleted(); unsubNoshow(); };
   }, [navigate]);
-
-  // autoNoShow: check every 30s if last called patient is still waiting after 3 min
-  useEffect(() => {
-    if (!lastCalledAt || !lastCalledId) return;
-    const interval = setInterval(async () => {
-      if (Date.now() - lastCalledAt < 3 * 60 * 1000) return;
-      const docSnap = await getDoc(doc(db, 'queue', lastCalledId));
-      if (docSnap.exists() && docSnap.data().status === 'waiting') {
-        await updateDoc(doc(db, 'queue', lastCalledId), { status: 'noshow' });
-        setAutoNoShowToast(`Token ${lastCalledToken} auto-marked as no-show`);
-        setTimeout(() => setAutoNoShowToast(''), 5000);
-        setLastCalledAt(null);
-        setLastCalledId(null);
-      }
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [lastCalledAt, lastCalledId, lastCalledToken]);
 
   // departmentTabs: auto-switch to All when selected dept becomes empty
   useEffect(() => {
@@ -201,23 +179,6 @@ function AdminDashboard() {
       fontFamily: "'Segoe UI', sans-serif", padding: '20px',
       position: 'relative', overflow: 'hidden'
     }}>
-      {/* autoNoShow toast */}
-      <AnimatePresence>
-        {autoNoShowToast && (
-          <motion.div
-            initial={{ opacity: 0, y: -40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -40 }}
-            style={{
-              position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
-              background: 'rgba(251,191,36,0.15)', borderBottom: '1px solid rgba(251,191,36,0.3)',
-              padding: '12px 24px', color: '#fbbf24', fontSize: '14px', fontWeight: '600',
-              textAlign: 'center', backdropFilter: 'blur(20px)',
-            }}
-          >
-            ⚠️ {autoNoShowToast}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       <div style={{
         position: 'fixed', top: '10%', left: '5%', width: '400px', height: '400px',
         background: 'radial-gradient(circle, rgba(37,99,235,0.08) 0%, transparent 70%)',
