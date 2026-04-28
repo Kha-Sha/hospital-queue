@@ -63,11 +63,16 @@ function DoctorDashboard() {
     if (!auth.currentUser) { navigate('/doctor-login'); return; }
 
     const fetchDoctorInfo = async () => {
-      const snap = await getDoc(doc(db, 'doctors', auth.currentUser.uid));
-      if (snap.exists()) {
-        setDoctorName(snap.data().name || 'Doctor');
-        setDepartment(snap.data().department || 'General OPD');
-      } else {
+      try {
+        const snap = await getDoc(doc(db, 'doctors', auth.currentUser.uid));
+        if (snap.exists()) {
+          setDoctorName(snap.data().name || 'Doctor');
+          setDepartment(snap.data().department || 'General OPD');
+        } else {
+          setNotConfigured(true);
+        }
+      } catch (err) {
+        console.error('Failed to fetch doctor info:', err);
         setNotConfigured(true);
       }
     };

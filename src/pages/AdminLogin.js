@@ -55,6 +55,10 @@ function AdminLogin() {
     return () => { cancelAnimationFrame(animationId); window.removeEventListener('resize', resize); };
   }, []);
 
+  useEffect(() => {
+    if (auth.currentUser) navigate('/admin-dashboard');
+  }, [navigate]);
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');

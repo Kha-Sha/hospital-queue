@@ -55,6 +55,10 @@ function DoctorLogin() {
     return () => { cancelAnimationFrame(animationId); window.removeEventListener('resize', resize); };
   }, []);
 
+  useEffect(() => {
+    if (auth.currentUser) navigate('/doctor-dashboard');
+  }, [navigate]);
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');

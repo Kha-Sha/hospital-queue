@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebase';
 import { doc, setDoc } from 'firebase/firestore';
@@ -16,6 +16,10 @@ function AdminSetup() {
   const [hospitalName, setHospitalName] = useState('');
   const [activeDepts, setActiveDepts] = useState(new Set(DEPARTMENTS));
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!auth.currentUser) { navigate('/admin-login'); return; }
+  }, [navigate]);
 
   const toggleDept = (dept) => {
     setActiveDepts(prev => {

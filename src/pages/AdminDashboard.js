@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { auth, db, firebaseConfig } from '../firebase';
 import { signOut, createUserWithEmailAndPassword, getAuth } from 'firebase/auth';
 import { initializeApp } from 'firebase/app';
-import { collection, query, where, onSnapshot, doc, setDoc, updateDoc, getDocs, getDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, setDoc, updateDoc, getDocs, getDoc, addDoc, serverTimestamp, deleteDoc, runTransaction } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { QRCodeCanvas as QRCode } from 'qrcode.react';
 
@@ -58,6 +58,8 @@ function AdminDashboard() {
         const snap = await getDocs(query(collection(db, 'queue'), where('status', '==', 'waiting')));
         await Promise.all(snap.docs.map(d => updateDoc(doc(db, 'queue', d.id), { status: 'cancelled' })));
         await setDoc(settingsRef, { currentToken: 0, lastToken: 0, lastReset: today }, { merge: true });
+        const assignedSnap = await getDocs(query(collection(db, 'pending'), where('status', '==', 'assigned')));
+        await Promise.all(assignedSnap.docs.map(d => deleteDoc(doc(db, 'pending', d.id))));
       }
     };
     checkAndResetQueue();
@@ -116,15 +118,18 @@ function AdminDashboard() {
   const assignDepartment = async (patient, department) => {
     try {
       const settingsRef = doc(db, 'settings', 'hospital');
-      const settingsSnap = await getDoc(settingsRef);
-      const lastToken = settingsSnap.exists() ? settingsSnap.data().lastToken || 0 : 0;
-      const newToken = lastToken + 1;
-      await addDoc(collection(db, 'queue'), {
-        userId: patient.userId, name: patient.name, phone: patient.phone,
-        department, tokenNumber: newToken, status: 'waiting', checkInTime: serverTimestamp(),
+      const newQueueRef = doc(collection(db, 'queue'));
+      await runTransaction(db, async (transaction) => {
+        const settingsDoc = await transaction.get(settingsRef);
+        const lastToken = settingsDoc.exists() ? settingsDoc.data().lastToken || 0 : 0;
+        const newToken = lastToken + 1;
+        transaction.set(settingsRef, { lastToken: newToken }, { merge: true });
+        transaction.set(newQueueRef, {
+          userId: patient.userId, name: patient.name, phone: patient.phone,
+          department, tokenNumber: newToken, status: 'waiting', checkInTime: serverTimestamp(),
+        });
+        transaction.update(doc(db, 'pending', patient.id), { status: 'assigned' });
       });
-      await setDoc(settingsRef, { lastToken: newToken }, { merge: true });
-      await updateDoc(doc(db, 'pending', patient.id), { status: 'assigned' });
     } catch (err) { console.error(err); }
   };
 
@@ -161,6 +166,10 @@ function AdminDashboard() {
       const snap = await getDocs(query(collection(db, 'queue'), where('status', '==', 'waiting')));
       await Promise.all(snap.docs.map(d => updateDoc(doc(db, 'queue', d.id), { status: 'cancelled' })));
       await setDoc(doc(db, 'settings', 'hospital'), { currentToken: 0, lastToken: 0, lastReset: new Date().toDateString() }, { merge: true });
+      const assignedSnap = await getDocs(query(collection(db, 'pending'), where('status', '==', 'assigned')));
+      await Promise.all(assignedSnap.docs.map(d => deleteDoc(doc(db, 'pending', d.id))));
+      const deptSnap = await getDocs(collection(db, 'departments'));
+      await Promise.all(deptSnap.docs.map(d => setDoc(doc(db, 'departments', d.id), { currentToken: 0 }, { merge: true })));
     } catch (err) { console.error(err); }
   };
 
@@ -168,15 +177,18 @@ function AdminDashboard() {
     e.preventDefault();
     setDoctorError('');
     setAddingDoctor(true);
+    const secondaryApp = initializeApp(firebaseConfig, `secondary-${Date.now()}`);
+    const secondaryAuth = getAuth(secondaryApp);
     try {
-      const secondaryApp = initializeApp(firebaseConfig, `secondary-${Date.now()}`);
-      const secondaryAuth = getAuth(secondaryApp);
       const credential = await createUserWithEmailAndPassword(secondaryAuth, doctorPhone + '@hospital-doctor.com', doctorPassword);
       await setDoc(doc(db, 'doctors', credential.user.uid), { name: doctorName, phone: doctorPhone, department: doctorDept });
-      await secondaryApp.delete();
       setDoctorName(''); setDoctorPhone(''); setDoctorPassword(''); setDoctorDept('General OPD');
       setShowAddDoctor(false);
-    } catch (err) { setDoctorError(err.message); }
+    } catch (err) {
+      setDoctorError(err.message);
+    } finally {
+      await secondaryApp.delete();
+    }
     setAddingDoctor(false);
   };
 

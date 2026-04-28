@@ -42,8 +42,6 @@ const QUOTES = [
 
 function PatientDashboard() {
   const navigate = useNavigate();
-  // eslint-disable-next-line
-  const [queueData, setQueueData] = useState(null);
   const [currentToken, setCurrentToken] = useState(0);
   const [loading, setLoading] = useState(true);
   const [checkedIn, setCheckedIn] = useState(false);
@@ -53,7 +51,7 @@ function PatientDashboard() {
   const [quoteIndex, setQuoteIndex] = useState(0);
   const [quoteVisible, setQuoteVisible] = useState(true);
   const [isPending, setIsPending] = useState(false);
-  const [hasBeenSeen, setHasBeenSeen] = useState(false);
+  const [hasBeenSeen, setHasBeenSeen] = useState(() => localStorage.getItem('qalm_seen_' + (auth.currentUser?.uid || '')) === 'true');
   const [hospitalName, setHospitalName] = useState('');
   const [showHistory, setShowHistory] = useState(false);
   const [visitHistory, setVisitHistory] = useState([]);
@@ -153,12 +151,15 @@ function PatientDashboard() {
         setTokenNumber(data.tokenNumber);
         setPatientDepartment(data.department || '');
         setCheckedIn(true);
-        setQueueData(data);
         if (!receiptShownRef.current) { // tokenReceipt: show once on first assignment
           receiptShownRef.current = true;
           setCheckInTimeLocal(new Date());
           setShowReceipt(true);
         }
+      } else {
+        setCheckedIn(false);
+        setTokenNumber(null);
+        setPatientDepartment('');
       }
     });
 
@@ -168,7 +169,11 @@ function PatientDashboard() {
 
 
 
-  const handleLogout = async () => { await signOut(auth); navigate('/'); };
+  const handleLogout = async () => {
+    if (auth.currentUser) localStorage.removeItem('qalm_seen_' + auth.currentUser.uid);
+    await signOut(auth);
+    navigate('/');
+  };
   const estimatedWait = tokensAhead * 10;
   const isBeingCalled = currentToken === tokenNumber && tokenNumber !== null;
   const estimatedTime = (() => {
@@ -421,7 +426,10 @@ function PatientDashboard() {
                       Please proceed to the doctor's room
                     </p>
                     <button
-                      onClick={() => setHasBeenSeen(true)}
+                      onClick={() => {
+                        localStorage.setItem('qalm_seen_' + auth.currentUser.uid, 'true');
+                        setHasBeenSeen(true);
+                      }}
                       style={{
                         padding: '12px 28px',
                         background: 'rgba(255,255,255,0.15)',

@@ -69,12 +69,19 @@ function PatientLogin() {
     e.preventDefault();
     setError('');
     setLoading(true);
+
+    let user;
     try {
       const userCredential = await signInWithEmailAndPassword(auth, phone + '@hospital.com', password);
-      const user = userCredential.user;
+      user = userCredential.user;
+    } catch (err) {
+      setError('Invalid phone number or password');
+      setLoading(false);
+      return;
+    }
 
-      // Get patient info
-      const { getDoc, doc, setDoc, getDocs, collection, query, where } = await import('firebase/firestore');
+    try {
+      const { getDoc, doc, setDoc, getDocs, collection, query, where, deleteDoc } = await import('firebase/firestore');
       const { db } = await import('../firebase');
       const patientSnap = await getDoc(doc(db, 'patients', user.uid));
       const patientData = patientSnap.exists() ? patientSnap.data() : {};
@@ -84,14 +91,21 @@ function PatientLogin() {
       const existingSnap = await getDocs(existingQ);
       if (!existingSnap.empty) {
         navigate('/patient-dashboard');
+        setLoading(false);
         return;
       }
       // 2. Already in pending flow (pending = awaiting assignment, assigned = token issued today)
       const pendingSnap = await getDoc(doc(db, 'pending', user.uid));
-      const pendingStatus = pendingSnap.exists() ? pendingSnap.data().status : null;
-      if (pendingStatus === 'pending' || pendingStatus === 'assigned') {
-        navigate('/patient-dashboard');
-        return;
+      if (pendingSnap.exists()) {
+        const pending = pendingSnap.data();
+        const isToday = new Date(pending.arrivedAt?.toDate()).toDateString() === new Date().toDateString();
+        if (!isToday) {
+          await deleteDoc(doc(db, 'pending', user.uid));
+        } else if (pending.status === 'pending' || pending.status === 'assigned') {
+          navigate('/patient-dashboard');
+          setLoading(false);
+          return;
+        }
       }
 
       // Create pending record so receptionist can assign department
@@ -102,11 +116,10 @@ function PatientLogin() {
         status: 'pending',
         arrivedAt: new Date(),
       });
-
-      navigate('/patient-dashboard');
     } catch (err) {
-      setError('Invalid phone number or password');
+      console.error('Firestore error during login flow:', err);
     }
+    navigate('/patient-dashboard');
     setLoading(false);
   };
 
