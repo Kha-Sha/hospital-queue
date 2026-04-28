@@ -56,7 +56,7 @@ function DoctorLogin() {
   }, []);
 
   useEffect(() => {
-    if (auth.currentUser) navigate('/doctor-dashboard');
+    if (auth.currentUser?.email?.endsWith('@hospital-doctor.com')) navigate('/doctor-dashboard');
   }, [navigate]);
 
   const handleLogin = async (e) => {
