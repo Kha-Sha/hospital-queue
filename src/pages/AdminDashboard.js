@@ -133,23 +133,6 @@ function AdminDashboard() {
     } catch (err) { console.error(err); }
   };
 
-  // autoNoShow: callNextToken no longer auto-completes — patient stays 'waiting' until Done/NoShow
-  const callNextToken = async () => {
-    const uncalled = queue.filter(p => p.tokenNumber > currentToken);
-    if (calling || uncalled.length === 0) return;
-    setCalling(true);
-    const next = Math.min(...uncalled.map(p => p.tokenNumber));
-    const justCalled = uncalled.find(p => p.tokenNumber === next);
-    await setDoc(doc(db, 'settings', 'hospital'), { currentToken: next }, { merge: true });
-    if (justCalled) {
-      await setDoc(doc(db, 'departments', justCalled.department), { currentToken: next }, { merge: true });
-      setLastCalledAt(Date.now());
-      setLastCalledId(justCalled.id);
-      setLastCalledToken(next);
-    }
-    setTimeout(() => setCalling(false), 1000);
-  };
-
   const markComplete = async (id) => await updateDoc(doc(db, 'queue', id), { status: 'completed' });
   const markNoShow = async (id) => await updateDoc(doc(db, 'queue', id), { status: 'noshow' });
   const handleLogout = async () => { await signOut(auth); navigate('/'); };
@@ -210,8 +193,6 @@ function AdminDashboard() {
 
   const activeDeptTabs = ['All', ...Object.keys(deptCounts).sort()]; // departmentTabs
   const filteredQueue = selectedDept === 'All' ? queue : queue.filter(p => p.department === selectedDept);
-  const uncalledQueue = queue.filter(p => p.tokenNumber > currentToken);
-  const nextTokenToCall = uncalledQueue.length > 0 ? Math.min(...uncalledQueue.map(p => p.tokenNumber)) : null;
 
   return (
     <div style={{
@@ -375,25 +356,6 @@ function AdminDashboard() {
             </button>
           ))}
         </div>
-
-        {/* Call next button */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} style={{ marginBottom: '16px' }}>
-          <motion.button onClick={callNextToken} disabled={calling || !nextTokenToCall}
-            whileHover={{ scale: calling || !nextTokenToCall ? 1 : 1.02 }}
-            whileTap={{ scale: calling || !nextTokenToCall ? 1 : 0.98 }}
-            style={{
-              width: '100%', padding: '20px',
-              background: calling || !nextTokenToCall ? 'rgba(255,255,255,0.05)' : 'linear-gradient(135deg, #15803d, #16a34a, #22c55e)',
-              color: calling || !nextTokenToCall ? 'rgba(255,255,255,0.3)' : 'white',
-              border: `1px solid ${!nextTokenToCall ? 'rgba(255,255,255,0.06)' : 'rgba(34,197,94,0.3)'}`,
-              borderRadius: '18px', fontSize: '17px', fontWeight: '700',
-              cursor: calling || !nextTokenToCall ? 'not-allowed' : 'pointer',
-              boxShadow: calling || !nextTokenToCall ? 'none' : '0 8px 32px rgba(22,163,74,0.4)',
-              backdropFilter: 'blur(20px)', transition: 'all 0.3s ease'
-            }}>
-            {calling ? '⏳ Calling...' : !nextTokenToCall ? 'No patients waiting' : `▶ Call Token ${nextTokenToCall}`}
-          </motion.button>
-        </motion.div>
 
         {/* Queue list */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}

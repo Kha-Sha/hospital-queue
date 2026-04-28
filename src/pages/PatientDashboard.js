@@ -215,6 +215,15 @@ function PatientDashboard() {
   }, [tokenNumber]);
 
   useEffect(() => {
+    if (!patientDepartment) return;
+    const deptRef = doc(db, 'departments', patientDepartment);
+    const unsubDept = onSnapshot(deptRef, (snap) => {
+      if (snap.exists()) setCurrentToken(snap.data().currentToken || 0);
+    });
+    return () => unsubDept();
+  }, [patientDepartment]);
+
+  useEffect(() => {
     if (!showHistory || !auth.currentUser) return;
     const fetchHistory = async () => {
       const snap = await getDocs(query(
