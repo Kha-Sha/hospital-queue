@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebase';
+import { useLanguage, LanguageSwitcher } from '../LanguageContext';
 import { signOut } from 'firebase/auth';
 import { doc, getDoc, getDocs, collection, query, where, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -42,6 +43,7 @@ const QUOTES = [
 
 function PatientDashboard() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [currentToken, setCurrentToken] = useState(0);
   const [loading, setLoading] = useState(true);
   const [checkedIn, setCheckedIn] = useState(false);
@@ -186,7 +188,7 @@ function PatientDashboard() {
   };
 
   const leaveQueue = async () => {
-    if (!window.confirm('Are you sure you want to leave the queue? Your token will be cancelled.')) return;
+    if (!window.confirm(t.leaveQueueConfirm)) return;
     try {
       const snap = await getDocs(query(collection(db, 'queue'), where('userId', '==', auth.currentUser.uid), where('status', '==', 'waiting')));
       await Promise.all(snap.docs.map(d => updateDoc(doc(db, 'queue', d.id), { status: 'cancelled' })));
@@ -201,8 +203,8 @@ function PatientDashboard() {
   const estimatedWait = tokensAhead * 10;
   const isBeingCalled = currentToken === tokenNumber && tokenNumber !== null;
   const estimatedTime = (() => {
-    const t = new Date(Date.now() + tokensAhead * 10 * 60 * 1000);
-    const h = t.getHours(), m = String(t.getMinutes()).padStart(2, '0');
+    const d = new Date(Date.now() + tokensAhead * 10 * 60 * 1000);
+    const h = d.getHours(), m = String(d.getMinutes()).padStart(2, '0');
     return `~${h % 12 || 12}:${m} ${h >= 12 ? 'PM' : 'AM'}`;
   })();
   const isNextUp = tokensAhead <= 2 && tokensAhead > 0;
@@ -270,7 +272,7 @@ function PatientDashboard() {
       minHeight: '100vh',
       background: 'radial-gradient(ellipse at 20% 50%, #0f1f3d 0%, #060d1a 60%, #0a0a0f 100%)',
       color: 'white', fontSize: '18px'
-    }}>Loading...</div>
+    }}><LanguageSwitcher />{t.loading}</div>
   );
   if (isPending) return (
     <div style={{
@@ -296,11 +298,12 @@ function PatientDashboard() {
         transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
         style={{ fontSize: '48px', marginBottom: '24px' }}
       >⏳</motion.div>
+      <LanguageSwitcher />
       <h2 style={{ color: 'white', fontSize: '22px', fontWeight: '700', marginBottom: '12px' }}>
-        You're registered!
+        {t.youreRegistered}
       </h2>
       <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '15px', lineHeight: '1.6' }}>
-        Please wait at reception while our staff assigns your department and generates your token.
+        {t.pleaseWait}
       </p>
       <div style={{
         marginTop: '24px', padding: '12px 20px',
@@ -308,7 +311,7 @@ function PatientDashboard() {
         borderRadius: '12px'
       }}>
         <p style={{ color: '#60a5fa', fontSize: '13px', margin: 0 }}>
-          Your screen will update automatically
+          {t.screenWillUpdate}
         </p>
       </div>
     </motion.div>
@@ -341,11 +344,12 @@ function PatientDashboard() {
           transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
           style={{ fontSize: '72px', margin: '0 auto 28px auto', lineHeight: 1 }}
         >🌿</motion.div>
+        <LanguageSwitcher />
         <h2 style={{ color: 'white', fontSize: '28px', fontWeight: '700', marginBottom: '12px' }}>
-          You're all set!
+          {t.youreAllSet}
         </h2>
         <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '15px', lineHeight: '1.7', marginBottom: '32px' }}>
-          Get well soon{patientName ? `, ${patientName}` : ''}. Take care of yourself.
+          {t.getWellSoon}{patientName ? `, ${patientName}` : ''}. {t.takeCareof}
         </p>
         <button onClick={handleLogout} style={{
           padding: '12px 32px',
@@ -353,7 +357,7 @@ function PatientDashboard() {
           border: '1px solid rgba(255,255,255,0.1)',
           borderRadius: '12px', color: 'rgba(255,255,255,0.5)',
           cursor: 'pointer', fontSize: '14px'
-        }}>Logout</button>
+        }}>{t.logout}</button>
       </motion.div>
     </div>
   );
@@ -371,6 +375,7 @@ function PatientDashboard() {
       <canvas ref={canvasRef} style={{
         position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0
       }} />
+      <LanguageSwitcher />
 
       <div style={{ position: 'relative', zIndex: 2, maxWidth: '460px', margin: '0 auto' }}>
 
@@ -399,7 +404,7 @@ function PatientDashboard() {
             )}
             {patientName && (
               <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '13px', marginTop: '2px' }}>
-                Hello, {patientName}
+                {t.hello} {patientName}
               </p>
             )}
           </div>
@@ -408,7 +413,7 @@ function PatientDashboard() {
             border: '1px solid rgba(255,255,255,0.1)',
             borderRadius: '8px', padding: '8px 16px',
             cursor: 'pointer', color: 'rgba(255,255,255,0.5)', fontSize: '13px'
-          }}>Logout</button>
+          }}>{t.logout}</button>
         </motion.div>
 
         <AnimatePresence mode="wait">
@@ -423,10 +428,10 @@ function PatientDashboard() {
               }}>
                 <div style={{ fontSize: '48px', marginBottom: '20px' }}>🏥</div>
                 <h3 style={{ color: 'white', fontSize: '22px', fontWeight: '700', marginBottom: '12px' }}>
-                  Please check in at reception
+                  {t.pleaseCheckInAtReception}
                 </h3>
                 <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '14px', lineHeight: '1.6' }}>
-                  Show this screen to the receptionist to get your token assigned.
+                  {t.showThisScreen}
                 </p>
               </div>
             </motion.div>
@@ -461,13 +466,13 @@ function PatientDashboard() {
                   <motion.div animate={{ scale: [1, 1.04, 1] }} transition={{ duration: 0.8, repeat: Infinity }}>
                     <div style={{ fontSize: '32px', marginBottom: '8px' }}>🚨</div>
                     <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '12px', letterSpacing: '3px', textTransform: 'uppercase', marginBottom: '8px' }}>
-                      Your turn now
+                      {t.yourTurnNow}
                     </p>
                     <div style={{ fontSize: '88px', fontWeight: '900', color: 'white', lineHeight: 1, marginBottom: '12px' }}>
                       {tokenNumber}
                     </div>
                     <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '15px', marginBottom: '20px' }}>
-                      Please proceed to the doctor's room
+                      {t.proceedToDoctor}
                     </p>
                     <button
                       onClick={() => {
@@ -483,13 +488,13 @@ function PatientDashboard() {
                         borderRadius: '12px', color: 'white',
                         cursor: 'pointer', fontSize: '15px', fontWeight: '600'
                       }}>
-                      I'm on my way →
+                      {t.imOnMyWay}
                     </button>
                   </motion.div>
                 ) : (
                   <>
                     <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '11px', letterSpacing: '3px', textTransform: 'uppercase', marginBottom: '12px' }}>
-                      Your Token
+                      {t.yourToken}
                     </p>
                     <motion.div
                       animate={{ opacity: [0.85, 1, 0.85] }}
@@ -498,7 +503,7 @@ function PatientDashboard() {
                     >
                       {tokenNumber}
                     </motion.div>
-                    <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: '13px', marginBottom: patientDepartment ? '12px' : 0 }}>Token number</p>
+                    <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: '13px', marginBottom: patientDepartment ? '12px' : 0 }}>{t.tokenNumber}</p>
                     {patientDepartment && (
                       <span style={{
                         display: 'inline-block',
@@ -550,7 +555,7 @@ function PatientDashboard() {
                         </p>
                       </div>
                       <div>
-                        <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '11px', margin: '0 0 3px 0' }}>Est. Wait</p>
+                        <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '11px', margin: '0 0 3px 0' }}>{t.estWait}</p>
                         <p style={{ color: 'white', fontSize: '13px', fontWeight: '600', margin: 0 }}>{estimatedWait} min</p>
                       </div>
                     </div>
@@ -567,7 +572,7 @@ function PatientDashboard() {
                   initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                   style={{ background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.15)', borderRadius: '14px', padding: '14px 16px', textAlign: 'center', marginBottom: '16px' }}>
                   <p style={{ color: '#fbbf24', fontWeight: '600', fontSize: '14px', margin: 0 }}>
-                    ⏸ Queue is temporarily paused. Please wait — we'll resume shortly.
+                    {t.queuePaused}
                   </p>
                 </motion.div>
               )}
@@ -575,10 +580,10 @@ function PatientDashboard() {
               {/* Stats */}
               <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 400 ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: '10px', marginBottom: '16px' }}>
                 {[
-                  { label: 'Now Calling', value: currentToken, highlight: false },
-                  { label: 'Ahead of You', value: tokensAhead, highlight: tokensAhead === 0 },
-                  { label: 'Est. Wait', value: `${estimatedWait}m`, highlight: false },
-                  { label: 'Est. Time', value: estimatedTime, highlight: false },
+                  { label: t.nowCalling, value: currentToken, highlight: false },
+                  { label: t.aheadOfYou, value: tokensAhead, highlight: tokensAhead === 0 },
+                  { label: t.estWait, value: `${estimatedWait}m`, highlight: false },
+                  { label: t.estTime, value: estimatedTime, highlight: false },
                 ].map((stat, i) => (
                   <div key={i} style={{
                     background: 'rgba(255,255,255,0.04)',
@@ -604,7 +609,7 @@ function PatientDashboard() {
                       borderRadius: '10px', color: '#f87171',
                       cursor: 'pointer', fontSize: '13px', fontWeight: '600',
                     }}>
-                    Leave Queue
+                    {t.leaveQueue}
                   </button>
                 </div>
               )}
@@ -618,7 +623,7 @@ function PatientDashboard() {
                     borderRadius: '14px', padding: '14px', textAlign: 'center', marginBottom: '16px'
                   }}>
                   <p style={{ color: '#fbbf24', fontWeight: '600', fontSize: '14px' }}>
-                    ⚡ Almost your turn — {tokensAhead} patient{tokensAhead > 1 ? 's' : ''} ahead
+                    ⚡ {t.almostYourTurn} — {tokensAhead} patient{tokensAhead > 1 ? 's' : ''} ahead
                   </p>
                 </motion.div>
               )}
@@ -631,7 +636,7 @@ function PatientDashboard() {
                 backdropFilter: 'blur(20px)', marginBottom: '12px',
               }}>
                 <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: '11px', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '10px' }}>
-                  While you wait
+                  {t.whileYouWait}
                 </p>
                 <AnimatePresence mode="wait">
                   <motion.div
@@ -667,7 +672,7 @@ function PatientDashboard() {
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                   }}
                 >
-                  <span>Visit History</span>
+                  <span>{t.visitHistory}</span>
                   <span>{showHistory ? '▲' : '▼'}</span>
                 </button>
                 <AnimatePresence>
@@ -682,7 +687,7 @@ function PatientDashboard() {
                       <div style={{ paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         {visitHistory.length === 0 ? (
                           <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: '13px', textAlign: 'center', padding: '20px 0' }}>
-                            No past visits found
+                            {t.noPastVisits}
                           </p>
                         ) : visitHistory.map(v => {
                           const date = v.checkInTime?.seconds

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../firebase';
+import { useLanguage, LanguageSwitcher } from '../LanguageContext';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { motion } from 'framer-motion';
 
@@ -12,6 +13,7 @@ function PatientLogin() {
   const [loading, setLoading] = useState(false);
   const [focused, setFocused] = useState('');
   const canvasRef = useRef(null);
+  const { t } = useLanguage();
 
   useEffect(() => {
     if (auth.currentUser) { navigate('/patient-dashboard'); return; }
@@ -80,7 +82,7 @@ function PatientLogin() {
       const userCredential = await signInWithEmailAndPassword(auth, phone + '@hospital.com', password);
       user = userCredential.user;
     } catch (err) {
-      setError('Invalid phone number or password');
+      setError(t.invalidCredentials);
       setLoading(false);
       return;
     }
@@ -153,6 +155,7 @@ function PatientLogin() {
         position: 'fixed', top: 0, left: 0,
         width: '100%', height: '100%', zIndex: 0
       }} />
+      <LanguageSwitcher />
 
       {/* Glow behind card */}
       <div style={{
@@ -204,9 +207,9 @@ function PatientLogin() {
           <h2 style={{
             color: 'white', fontSize: '26px', fontWeight: '700',
             marginBottom: '8px', letterSpacing: '-0.5px'
-          }}>Welcome back</h2>
+          }}>{t.welcomeBack}</h2>
           <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '14px' }}>
-            Sign in to track your queue position
+            {t.signInToTrack}
           </p>
         </div>
 
@@ -229,7 +232,7 @@ function PatientLogin() {
               color: 'rgba(255,255,255,0.5)', fontSize: '12px',
               fontWeight: '600', letterSpacing: '0.8px',
               textTransform: 'uppercase', marginBottom: '8px', display: 'block'
-            }}>Phone Number</label>
+            }}>{t.phoneNumber}</label>
             <input
               type="tel"
               placeholder="Enter your 10-digit number"
@@ -247,7 +250,7 @@ function PatientLogin() {
               color: 'rgba(255,255,255,0.5)', fontSize: '12px',
               fontWeight: '600', letterSpacing: '0.8px',
               textTransform: 'uppercase', marginBottom: '8px', display: 'block'
-            }}>Password</label>
+            }}>{t.password}</label>
             <input
               type="password"
               placeholder="Your password"
@@ -277,26 +280,26 @@ function PatientLogin() {
               position: 'relative', overflow: 'hidden'
             }}>
             {loading ? (
-              <span style={{ opacity: 0.7 }}>Signing in...</span>
+              <span style={{ opacity: 0.7 }}>{t.signingIn}</span>
             ) : (
-              'Sign In →'
+              t.signIn
             )}
           </motion.button>
         </form>
 
         <div style={{ marginTop: '24px', textAlign: 'center' }}>
           <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.3)', marginBottom: '8px' }}>
-            New patient?{' '}
+            {t.newPatient}{' '}
             <span
               onClick={() => navigate('/patient-register')}
               style={{ color: '#60a5fa', cursor: 'pointer', fontWeight: '600' }}>
-              Create account
+              {t.createAccount}
             </span>
           </p>
           <span
             onClick={() => navigate('/')}
             style={{ color: 'rgba(255,255,255,0.2)', cursor: 'pointer', fontSize: '12px' }}>
-            ← Back to home
+            {t.back}
           </span>
         </div>
       </motion.div>

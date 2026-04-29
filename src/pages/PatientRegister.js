@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebase';
+import { useLanguage, LanguageSwitcher } from '../LanguageContext';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { motion } from 'framer-motion';
@@ -17,6 +18,7 @@ function PatientRegister() {
   const [loading, setLoading] = useState(false);
   const [focused, setFocused] = useState('');
   const canvasRef = useRef(null);
+  const { t } = useLanguage();
 
   useEffect(() => {
     getDoc(doc(db, 'settings', 'hospital')).then(snap => {
@@ -71,8 +73,8 @@ function PatientRegister() {
   const handleRegister = async (e) => {
     e.preventDefault();
     setError('');
-    if (phone.length !== 10) { setError('Please enter a valid 10-digit phone number'); return; }
-    if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
+    if (phone.length !== 10) { setError(t.phoneLength); return; }
+    if (password.length < 6) { setError(t.passwordLength); return; }
     setLoading(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, phone + '@hospital.com', password);
@@ -90,9 +92,9 @@ function PatientRegister() {
       navigate('/patient-dashboard');
     } catch (err) {
       if (err.code === 'auth/email-already-in-use') {
-        setError('This phone number is already registered. Please login.');
+        setError(t.phoneRegistered);
       } else {
-        setError('Registration failed. Please try again.');
+        setError(t.registrationFailed);
       }
     }
     setLoading(false);
@@ -118,6 +120,7 @@ function PatientRegister() {
       <canvas ref={canvasRef} style={{
         position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0
       }} />
+      <LanguageSwitcher />
 
       <div style={{
         position: 'absolute', width: '400px', height: '400px',
@@ -159,10 +162,10 @@ function PatientRegister() {
               boxShadow: '0 8px 32px rgba(37,99,235,0.5)',
             }}>Q</motion.div>
           <h2 style={{ color: 'white', fontSize: '26px', fontWeight: '700', marginBottom: '8px', letterSpacing: '-0.5px' }}>
-            Create account
+            {t.createAccountTitle}
           </h2>
           <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '14px' }}>
-            Join Qalm to track your hospital queue
+            {t.joinQalm}
           </p>
         </div>
 
@@ -179,9 +182,9 @@ function PatientRegister() {
 
         <form onSubmit={handleRegister}>
           {[
-            { label: 'Full Name', key: 'name', type: 'text', placeholder: 'Your full name', value: name, setter: setName },
-            { label: 'Phone Number', key: 'phone', type: 'tel', placeholder: '10-digit phone number', value: phone, setter: setPhone },
-            { label: 'Password', key: 'password', type: 'password', placeholder: 'Min 6 characters', value: password, setter: setPassword },
+            { label: t.fullName, key: 'name', type: 'text', placeholder: 'Your full name', value: name, setter: setName },
+            { label: t.phoneNumber, key: 'phone', type: 'tel', placeholder: '10-digit phone number', value: phone, setter: setPhone },
+            { label: t.password, key: 'password', type: 'password', placeholder: t.minPassword, value: password, setter: setPassword },
           ].map((field, i) => (
             <div key={i} style={{ marginBottom: i === 2 ? '28px' : '16px' }}>
               <label style={{
@@ -203,7 +206,7 @@ function PatientRegister() {
 
           <div style={{ marginBottom: '28px' }}>
             <label style={{ color: 'rgba(255,255,255,0.5)', fontSize: '12px', fontWeight: '600', letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: '8px', display: 'block' }}>
-              Department (optional)
+              {t.departmentOptional}
             </label>
             <select
               value={preferredDept}
@@ -216,7 +219,7 @@ function PatientRegister() {
                 boxSizing: 'border-box', outline: 'none', cursor: 'pointer',
               }}
             >
-              <option value="" style={{ background: '#0f1f3d', color: 'rgba(255,255,255,0.5)' }}>Select department (optional)</option>
+              <option value="" style={{ background: '#0f1f3d', color: 'rgba(255,255,255,0.5)' }}>{t.selectDept}</option>
               {activeDepartments.map(dept => ( // activeDepartments
                 <option key={dept} value={dept} style={{ background: '#0f1f3d', color: 'white' }}>{dept}</option>
               ))}
@@ -236,19 +239,19 @@ function PatientRegister() {
               boxShadow: loading ? 'none' : '0 8px 32px rgba(37,99,235,0.4)',
               letterSpacing: '0.3px'
             }}>
-            {loading ? 'Creating account...' : 'Create Account →'}
+            {loading ? t.creatingAccount : t.register}
           </motion.button>
         </form>
 
         <div style={{ marginTop: '24px', textAlign: 'center' }}>
           <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.3)', marginBottom: '8px' }}>
-            Already registered?{' '}
+            {t.alreadyRegistered}{' '}
             <span onClick={() => navigate('/patient-login')} style={{ color: '#60a5fa', cursor: 'pointer', fontWeight: '600' }}>
-              Sign in
+              {t.signInLink}
             </span>
           </p>
           <span onClick={() => navigate('/')} style={{ color: 'rgba(255,255,255,0.2)', cursor: 'pointer', fontSize: '12px' }}>
-            ← Back to home
+            {t.back}
           </span>
         </div>
       </motion.div>

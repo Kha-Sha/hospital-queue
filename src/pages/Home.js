@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useLanguage, LanguageSwitcher } from '../LanguageContext';
 import { motion } from 'framer-motion';
 
 function ParticleCanvas() {
@@ -97,6 +98,7 @@ function ParticleCanvas() {
 
 function Home() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
 
   return (
     <div style={{
@@ -111,6 +113,7 @@ function Home() {
       fontFamily: "'Segoe UI', sans-serif"
     }}>
       <ParticleCanvas />
+      <LanguageSwitcher />
 
       {/* Glow orbs */}
       <div style={{
@@ -168,12 +171,11 @@ function Home() {
             letterSpacing: '-2px'
           }}
         >
-          The Wait Is{' '}
           <span style={{
             background: 'linear-gradient(135deg, #60a5fa, #2563eb)',
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent'
-          }}>Over.</span>
+          }}>{t.tagline}</span>
         </motion.h1>
 
         {/* Subheadline */}
@@ -187,11 +189,11 @@ function Home() {
             marginBottom: '48px',
             maxWidth: '540px',
             margin: '0 auto 48px auto',
-            lineHeight: 1.6
+            lineHeight: 1.6,
+            whiteSpace: 'pre-line'
           }}
         >
-          Real-time queue management for hospitals.<br />
-          Patients track their turn. Staff run smarter queues.
+          {t.subheadline}
         </motion.p>
 
         {/* Buttons */}
@@ -215,7 +217,7 @@ function Home() {
               boxShadow: '0 8px 32px rgba(37,99,235,0.4)',
               letterSpacing: '0.5px'
             }}>
-            I'm a Patient →
+            {t.iAmPatient}
           </button>
 
           <button
@@ -232,7 +234,7 @@ function Home() {
               backdropFilter: 'blur(10px)',
               letterSpacing: '0.5px'
             }}>
-            Hospital Staff
+            {t.hospitalStaff}
           </button>
           
           <button
@@ -249,7 +251,7 @@ function Home() {
               backdropFilter: 'blur(10px)',
               letterSpacing: '0.5px'
             }}>
-            I'm a Doctor
+            {t.iAmDoctor}
           </button>
         </motion.div>
           
@@ -264,9 +266,9 @@ function Home() {
           }}
         >
           {[
-            { number: '3hrs', label: 'Average wait saved' },
-            { number: 'Live', label: 'Real-time updates' },
-            { number: '0₹', label: 'Patient cost' },
+            { number: '3hrs', label: t.avgWaitSaved },
+            { number: 'Live', label: t.realTimeUpdates },
+            { number: '0₹', label: t.patientCost },
           ].map((stat, i) => (
             <div key={i} style={{ textAlign: 'center' }}>
               <div style={{
