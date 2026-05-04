@@ -39,9 +39,12 @@ function AdminDashboard() {
   const [addingStaff, setAddingStaff] = useState(false);
   const [staffError, setStaffError] = useState('');
   const [adminsList, setAdminsList] = useState([]);
+  const [whatsappNumber, setWhatsappNumber] = useState('');
+  const [editingWhatsapp, setEditingWhatsapp] = useState(false);
 
   useEffect(() => {
     if (!auth.currentUser) { navigate('/admin-login'); return; }
+    if (!auth.currentUser.email?.endsWith('@hospital-admin.com')) { navigate('/admin-login'); return; }
     localStorage.setItem('hospitalId', auth.currentUser.uid);
 
     const checkAndResetQueue = async () => {
@@ -59,6 +62,8 @@ function AdminDashboard() {
         await setDoc(settingsRef, { currentToken: 0, lastToken: 0, lastReset: today }, { merge: true });
         const assignedSnap = await getDocs(query(collection(db, 'pending'), where('status', '==', 'assigned')));
         await Promise.all(assignedSnap.docs.map(d => deleteDoc(doc(db, 'pending', d.id))));
+        const pendingSnap = await getDocs(query(collection(db, 'pending'), where('status', '==', 'pending')));
+        await Promise.all(pendingSnap.docs.map(d => deleteDoc(doc(db, 'pending', d.id))));
       }
     };
     checkAndResetQueue();
@@ -68,6 +73,7 @@ function AdminDashboard() {
         setCurrentToken(snap.data().currentToken || 0);
         setHospitalName(snap.data().hospitalName || 'Your Hospital');
         setQueuePaused(snap.data().queuePaused || false);
+        setWhatsappNumber(snap.data().whatsappNumber || '');
         if (snap.data().activeDepartments?.length) {
           setActiveDepartments(snap.data().activeDepartments); // activeDepartments
         }
@@ -127,6 +133,11 @@ function AdminDashboard() {
     setEditingName(false);
     if (!hospitalName.trim()) return;
     await setDoc(doc(db, 'settings', 'hospital'), { hospitalName: hospitalName.trim() }, { merge: true });
+  };
+
+  const saveWhatsappNumber = async () => {
+    setEditingWhatsapp(false);
+    await setDoc(doc(db, 'settings', 'hospital'), { whatsappNumber: whatsappNumber.trim() }, { merge: true });
   };
 
   const resetQueue = async () => {
@@ -524,6 +535,40 @@ function AdminDashboard() {
             )}
           </AnimatePresence>
         </div>
+
+        {/* Hospital Settings */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.38 }}
+          style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '24px', padding: '24px', backdropFilter: 'blur(20px)', marginBottom: '16px' }}>
+          <h3 style={{ color: 'rgba(255,255,255,0.7)', margin: '0 0 16px 0', fontSize: '15px', fontWeight: '700' }}>⚙️ Hospital Settings</h3>
+          <div>
+            <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '8px' }}>WhatsApp Number</p>
+            {editingWhatsapp ? (
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <input
+                  autoFocus
+                  value={whatsappNumber}
+                  onChange={e => setWhatsappNumber(e.target.value)}
+                  placeholder="e.g. 919876543210 (with country code, no +)"
+                  onBlur={saveWhatsappNumber}
+                  onKeyDown={e => e.key === 'Enter' && saveWhatsappNumber()}
+                  style={{ flex: 1, minWidth: '200px', padding: '9px 12px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: 'white', fontSize: '13px', outline: 'none' }}
+                />
+                <button onClick={saveWhatsappNumber} style={{ padding: '9px 16px', background: 'rgba(37,211,102,0.15)', border: '1px solid rgba(37,211,102,0.3)', borderRadius: '8px', color: '#25D366', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>Save</button>
+                <button onClick={() => setEditingWhatsapp(false)} style={{ padding: '9px 12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: '13px' }}>Cancel</button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <p style={{ color: whatsappNumber ? 'white' : 'rgba(255,255,255,0.2)', fontSize: '14px', margin: 0, fontWeight: whatsappNumber ? '600' : '400' }}>
+                  {whatsappNumber || 'Not set — patients will not see the WhatsApp prompt'}
+                </p>
+                <button onClick={() => setEditingWhatsapp(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.3)', fontSize: '12px', padding: '0 2px' }} title="Edit">✏️</button>
+              </div>
+            )}
+            <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: '12px', marginTop: '6px' }}>
+              Patients will see a "Get WhatsApp updates" button after receiving their token.
+            </p>
+          </div>
+        </motion.div>
 
         {/* QR Code + printQR button */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}

@@ -33,10 +33,50 @@ General OPD, Paediatrics, Cardiology, Orthopaedics, Gynaecology, Dermatology, EN
 - Admins: phone@hospital-admin.com  
 - Doctors: phone@hospital-doctor.com
 
+## Features
+- Pending flow — receptionist assigns department to arrived patients
+- Multi-department support with department tabs
+- Doctor login and dashboard with per-department queue
+- QR code for patient check-in (printable, with print QR code button)
+- Quotes displayed while patient is waiting
+- PWA support
+- Daily queue reset (automatic on admin login)
+- Sound notification when patient is called
+- Estimated appointment time shown to patient
+- Visit history for returning patients
+- Token receipt shown on assignment
+- Analytics dashboard
+- Hospital name customization
+- Onboarding wizard for new hospitals
+- Multi-language support (English, Hindi, Kannada, Tamil)
+- Cancel token — patient can leave queue
+- Priority queue jump — admin can move patient to front
+- Pause/resume queue (admin)
+- Doctor name shown on patient screen
+- Multiple admin accounts
+- Patient search by name or phone
+- Get Well Soon screen after consultation
+- Auto no-show detection (3 minutes)
+- Firestore security rules
+- Mobile optimized
+- Particle performance optimization for low-end devices
+
 ## Known Issues / In Progress
-- Get Well Soon screen after patient is called
-- Doctor dashboard needs department-based queue filtering
-- Daily queue reset runs on admin login
+V1 feature complete. Multi-language added. Ready for pilot deployment.
+
+## Deployment
+- Live URL: hospital-queue-kappa.vercel.app
+- GitHub: github.com/Kha-Sha/hospital-queue
+- Firebase Project: hospital-queue-80a31
+- Admin credentials (test): 9999999999 / admin123
+
+## V2 Roadmap
+- Digital health records vault (patient uploads reports, doctor views history)
+- WhatsApp notifications
+- Native mobile app (React Native)
+- Multi-hospital management dashboard
+- Advanced analytics with charts
+- Telemedicine queue integration
 
 ## Design System
 - Background: radial-gradient(ellipse at 20% 50%, #0f1f3d 0%, #060d1a 60%, #0a0a0f 100%)
