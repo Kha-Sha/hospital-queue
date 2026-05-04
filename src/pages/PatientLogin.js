@@ -72,7 +72,7 @@ function PatientLogin() {
       });
     } catch (err) {
       console.error('Firestore error during login flow:', err);
-      setError('Connection issue. Please try again.');
+      setError(t.connectionIssue);
       setLoading(false);
       return;
     }

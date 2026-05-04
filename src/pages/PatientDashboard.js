@@ -259,14 +259,14 @@ function PatientDashboard() {
 
         {patientName && (
           <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: '14px', marginBottom: '8px' }}>
-            Hi {patientName},
+            {t.hello} {patientName}
           </p>
         )}
         <h2 style={{ color: 'white', fontSize: '22px', fontWeight: '600', marginBottom: '12px' }}>
-          {hospitalName ? `You're registered at ${hospitalName}.` : t.youreRegistered}
+          {hospitalName ? `${t.youreRegisteredAt} ${hospitalName}.` : t.youreRegistered}
         </h2>
         <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '15px', lineHeight: '1.6', marginBottom: '32px' }}>
-          The receptionist will assign your department shortly.
+          {t.receptionistAssigning}
         </p>
 
         {/* Calm progress bar */}
@@ -286,7 +286,7 @@ function PatientDashboard() {
         </div>
 
         <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: '13px' }}>
-          This screen will update automatically.
+          {t.screenWillUpdate}
         </p>
       </motion.div>
     </div>
@@ -325,17 +325,17 @@ function PatientDashboard() {
         )}
 
         <h2 style={{ color: '#111827', fontSize: '28px', fontWeight: '700', marginBottom: '12px', letterSpacing: '-0.5px' }}>
-          Take care{patientName ? `, ${patientName}` : ''}.
+          {t.takeCare}{patientName ? `, ${patientName}` : ''}.
         </h2>
 
         {assignedDoctor && (
           <p style={{ color: '#6b7280', fontSize: '15px', marginBottom: '8px' }}>
-            You've been seen by Dr. {assignedDoctor}.
+            {t.seenByDoctor} Dr. {assignedDoctor}.
           </p>
         )}
 
         <p style={{ color: '#9ca3af', fontSize: '14px', lineHeight: '1.6', marginBottom: '40px' }}>
-          We hope you're feeling better soon.
+          {t.getWellSoonSubtitle}
         </p>
 
         <button
@@ -548,7 +548,7 @@ function PatientDashboard() {
                   }}
                 >
                   <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '14px', margin: 0 }}>
-                    Get WhatsApp updates about your turn
+                    {t.getWhatsappUpdates}
                   </p>
                   <button
                     onClick={() => {
@@ -568,7 +568,7 @@ function PatientDashboard() {
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    💬 Enable WhatsApp updates
+                    {t.enableWhatsapp}
                   </button>
                 </motion.div>
               )}
@@ -586,22 +586,22 @@ function PatientDashboard() {
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                       <div>
-                        <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: '10px', letterSpacing: '2px', textTransform: 'uppercase', margin: 0 }}>Token Receipt</p>
+                        <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: '10px', letterSpacing: '2px', textTransform: 'uppercase', margin: 0 }}>{t.receiptTitle}</p>
                         <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '12px', fontWeight: '600', margin: '3px 0 0 0' }}>{hospitalName}</p>
                       </div>
                       <button onClick={() => setShowReceipt(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.25)', fontSize: '20px', padding: 0, lineHeight: 1 }}>×</button>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
                       <div>
-                        <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: '11px', margin: '0 0 3px 0' }}>Department</p>
+                        <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: '11px', margin: '0 0 3px 0' }}>{t.receiptDepartment}</p>
                         <p style={{ color: 'white', fontSize: '13px', fontWeight: '600', margin: 0 }}>{patientDepartment}</p>
                       </div>
                       <div>
-                        <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: '11px', margin: '0 0 3px 0' }}>Token</p>
+                        <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: '11px', margin: '0 0 3px 0' }}>{t.receiptToken}</p>
                         <p style={{ color: '#60a5fa', fontSize: '26px', fontWeight: '700', margin: 0, fontFamily: "'DM Serif Display', Georgia, serif", lineHeight: 1 }}>{tokenNumber}</p>
                       </div>
                       <div>
-                        <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: '11px', margin: '0 0 3px 0' }}>Checked in</p>
+                        <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: '11px', margin: '0 0 3px 0' }}>{t.receiptCheckedIn}</p>
                         <p style={{ color: 'white', fontSize: '13px', fontWeight: '600', margin: 0 }}>
                           {checkInTimeLocal ? checkInTimeLocal.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : '—'}
                         </p>
@@ -612,7 +612,7 @@ function PatientDashboard() {
                       </div>
                     </div>
                     <div style={{ borderTop: '1px dashed rgba(255,255,255,0.08)', paddingTop: '10px', textAlign: 'center' }}>
-                      <p style={{ color: 'rgba(255,255,255,0.18)', fontSize: '11px', margin: 0 }}>Show this at reception if needed</p>
+                      <p style={{ color: 'rgba(255,255,255,0.18)', fontSize: '11px', margin: 0 }}>{t.receiptShowAtReception}</p>
                     </div>
                   </motion.div>
                 )}
@@ -712,7 +712,7 @@ function PatientDashboard() {
                             borderRadius: '10px', color: '#f87171',
                             cursor: 'pointer', fontSize: '13px', fontWeight: '600',
                           }}>
-                          Yes, leave
+                          {t.leaveYes}
                         </button>
                         <button
                           onClick={() => setShowLeaveConfirm(false)}
@@ -723,7 +723,7 @@ function PatientDashboard() {
                             borderRadius: '10px', color: 'rgba(255,255,255,0.5)',
                             cursor: 'pointer', fontSize: '13px',
                           }}>
-                          Stay
+                          {t.leaveStay}
                         </button>
                       </motion.div>
                     ) : (

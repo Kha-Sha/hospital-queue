@@ -18,11 +18,13 @@ function PatientRegister() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [focused, setFocused] = useState('');
+  const [noHospital, setNoHospital] = useState(false);
   const { t } = useLanguage();
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const hospitalId = params.get('hospital') || 'default';
+    const hospitalId = params.get('hospital');
+    if (!hospitalId) { setNoHospital(true); return; }
     localStorage.setItem('qalm_hospital_id', hospitalId);
     getDoc(doc(db, 'hospitals', getHospitalId(), 'settings', 'hospital')).then(snap => {
       if (snap.exists() && snap.data().activeDepartments?.length) {
@@ -69,6 +71,36 @@ function PatientRegister() {
     boxSizing: 'border-box', outline: 'none', transition: 'all 0.3s ease',
     boxShadow: focused === name ? '0 0 0 3px rgba(37,99,235,0.15)' : 'none',
   });
+
+  if (noHospital) return (
+    <div style={{
+      minHeight: '100vh',
+      background: 'radial-gradient(ellipse at 20% 50%, #0f1f3d 0%, #060d1a 60%, #0a0a0f 100%)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '20px',
+    }}>
+      <LanguageSwitcher />
+      <div style={{
+        background: 'rgba(255,255,255,0.04)',
+        border: '1px solid rgba(239,68,68,0.2)',
+        borderRadius: '24px', padding: '40px',
+        backdropFilter: 'blur(40px)', textAlign: 'center', maxWidth: '360px',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px', color: 'rgba(239,68,68,0.6)' }}>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+            <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+          </svg>
+        </div>
+        <p style={{ color: 'white', fontSize: '16px', fontWeight: '600', marginBottom: '12px' }}>
+          {t.noHospitalParam}
+        </p>
+        <span onClick={() => navigate('/')} style={{ color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: '13px' }}>
+          {t.back}
+        </span>
+      </div>
+    </div>
+  );
 
   return (
     <div style={{

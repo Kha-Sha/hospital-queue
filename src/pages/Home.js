@@ -66,7 +66,7 @@ function Home() {
             letterSpacing: '-2px',
           }}
         >
-          Your queue.<br />On your phone.
+          {t.headline}
         </motion.h1>
 
         {/* Subheadline */}
@@ -81,7 +81,7 @@ function Home() {
             lineHeight: 1.65,
           }}
         >
-          Patients track their turn in real time.<br />Staff manage queues without the chaos.
+          {t.subheadline}
         </motion.p>
 
         {/* Buttons */}
@@ -141,9 +141,9 @@ function Home() {
           }}
         >
           {[
-            'No more crowding reception',
-            'Know your turn before you arrive',
-            'Works on any phone, no download',
+            t.valueNoCrowding,
+            t.valueKnowYourTurn,
+            t.valueNoDownload,
           ].map((text, i) => (
             <div key={i} style={{
               display: 'flex', alignItems: 'center', gap: '8px',
@@ -167,18 +167,9 @@ function Home() {
           }}
         >
           {[
-            {
-              title: 'Your number on your phone',
-              desc: 'Patients see exactly how many people are ahead of them. No guessing, no hovering at the front desk.',
-            },
-            {
-              title: 'One system, every department',
-              desc: 'General OPD, Cardiology, Paediatrics — each department has its own queue. Doctors call from their own list.',
-            },
-            {
-              title: 'No app to download',
-              desc: 'Patients scan a QR code at reception. Works on any phone with mobile data. Takes 30 seconds to register.',
-            },
+            { title: t.feature1Title, desc: t.feature1Desc },
+            { title: t.feature2Title, desc: t.feature2Desc },
+            { title: t.feature3Title, desc: t.feature3Desc },
           ].map((feature, i) => (
             <div key={i} style={{
               flex: '1 1 200px', maxWidth: '240px',
