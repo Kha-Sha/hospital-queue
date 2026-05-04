@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth } from '../firebase';
+import { auth, db } from '../firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 import { motion } from 'framer-motion';
 import ParticleCanvas from '../components/ParticleCanvas';
 
@@ -22,7 +23,12 @@ function DoctorLogin() {
     setError('');
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, phone + '@hospital-doctor.com', password);
+      const credential = await signInWithEmailAndPassword(auth, phone + '@hospital-doctor.com', password);
+      // Global doctors index stores hospitalId so we can scope all subsequent reads
+      const doctorSnap = await getDoc(doc(db, 'doctors', credential.user.uid));
+      if (doctorSnap.exists()) {
+        localStorage.setItem('qalm_hospital_id', doctorSnap.data().hospitalId || 'default');
+      }
       navigate('/doctor-dashboard');
     } catch (err) {
       setError('Invalid credentials. Please try again.');

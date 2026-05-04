@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, db } from '../firebase';
+import { auth, db, getHospitalId } from '../firebase';
 import { useLanguage, LanguageSwitcher } from '../LanguageContext';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
@@ -21,7 +21,10 @@ function PatientRegister() {
   const { t } = useLanguage();
 
   useEffect(() => {
-    getDoc(doc(db, 'settings', 'hospital')).then(snap => {
+    const params = new URLSearchParams(window.location.search);
+    const hospitalId = params.get('hospital') || 'default';
+    localStorage.setItem('qalm_hospital_id', hospitalId);
+    getDoc(doc(db, 'hospitals', getHospitalId(), 'settings', 'hospital')).then(snap => {
       if (snap.exists() && snap.data().activeDepartments?.length) {
         setActiveDepartments(snap.data().activeDepartments);
       }
@@ -38,8 +41,9 @@ function PatientRegister() {
       const userCredential = await createUserWithEmailAndPassword(auth, phone + '@hospital.com', password);
       await setDoc(doc(db, 'patients', userCredential.user.uid), {
         name, phone, createdAt: new Date(), role: 'patient',
+        hospitalId: getHospitalId(),
       });
-      await setDoc(doc(db, 'pending', userCredential.user.uid), {
+      await setDoc(doc(db, 'hospitals', getHospitalId(), 'pending', userCredential.user.uid), {
         name, phone,
         userId: userCredential.user.uid,
         status: 'pending',

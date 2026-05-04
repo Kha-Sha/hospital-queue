@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, db } from '../firebase';
+import { auth, db, getHospitalId } from '../firebase';
 import { useLanguage, LanguageSwitcher } from '../LanguageContext';
 import { signOut } from 'firebase/auth';
 import { doc, getDoc, getDocs, collection, query, where, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore';
@@ -89,13 +89,13 @@ function PatientDashboard() {
     };
     fetchName();
 
-    const pendingRef = doc(db, 'pending', auth.currentUser.uid);
+    const pendingRef = doc(db, 'hospitals', getHospitalId(), 'pending', auth.currentUser.uid);
     const unsubPending = onSnapshot(pendingRef, (snap) => {
       setIsPending(snap.exists() && snap.data().status === 'pending');
       setLoading(false);
     });
 
-    const unsubSettings = onSnapshot(doc(db, 'settings', 'hospital'), (snap) => {
+    const unsubSettings = onSnapshot(doc(db, 'hospitals', getHospitalId(), 'settings', 'hospital'), (snap) => {
       if (snap.exists()) {
         setHospitalName(snap.data().hospitalName || '');
         setQueuePaused(snap.data().queuePaused || false);
@@ -103,7 +103,7 @@ function PatientDashboard() {
       }
     });
 
-    const q = query(collection(db, 'queue'), where('userId', '==', auth.currentUser.uid), where('status', '==', 'waiting'));
+    const q = query(collection(db, 'hospitals', getHospitalId(), 'queue'), where('userId', '==', auth.currentUser.uid), where('status', '==', 'waiting'));
     const unsubQueue = onSnapshot(q, (snapshot) => {
       if (!snapshot.empty) {
         const data = snapshot.docs[0].data();
@@ -138,9 +138,9 @@ function PatientDashboard() {
 
   const leaveQueue = async () => {
     try {
-      const snap = await getDocs(query(collection(db, 'queue'), where('userId', '==', auth.currentUser.uid), where('status', '==', 'waiting')));
-      await Promise.all(snap.docs.map(d => updateDoc(doc(db, 'queue', d.id), { status: 'cancelled' })));
-      await deleteDoc(doc(db, 'pending', auth.currentUser.uid));
+      const snap = await getDocs(query(collection(db, 'hospitals', getHospitalId(), 'queue'), where('userId', '==', auth.currentUser.uid), where('status', '==', 'waiting')));
+      await Promise.all(snap.docs.map(d => updateDoc(doc(db, 'hospitals', getHospitalId(), 'queue', d.id), { status: 'cancelled' })));
+      await deleteDoc(doc(db, 'hospitals', getHospitalId(), 'pending', auth.currentUser.uid));
       localStorage.removeItem('qalm_seen_' + auth.currentUser.uid);
       setCheckedIn(false);
       setTokenNumber(null);
@@ -168,7 +168,7 @@ function PatientDashboard() {
 
   useEffect(() => {
     if (!tokenNumber) return;
-    const q = query(collection(db, 'queue'), where('status', '==', 'waiting'));
+    const q = query(collection(db, 'hospitals', getHospitalId(), 'queue'), where('status', '==', 'waiting'));
     const unsub = onSnapshot(q, (snap) => {
       const count = snap.docs.filter(d => d.data().tokenNumber < tokenNumber).length;
       setTokensAhead(count);
@@ -178,7 +178,7 @@ function PatientDashboard() {
 
   useEffect(() => {
     if (!patientDepartment) return;
-    const deptRef = doc(db, 'departments', patientDepartment);
+    const deptRef = doc(db, 'hospitals', getHospitalId(), 'departments', patientDepartment);
     const unsub = onSnapshot(deptRef, (snap) => {
       if (snap.exists()) setCurrentToken(snap.data().currentToken || 0);
     });
@@ -189,7 +189,7 @@ function PatientDashboard() {
     if (!showHistory || !auth.currentUser) return;
     const fetchHistory = async () => {
       const snap = await getDocs(query(
-        collection(db, 'queue'),
+        collection(db, 'hospitals', getHospitalId(), 'queue'),
         where('userId', '==', auth.currentUser.uid),
         where('status', '==', 'completed')
       ));
@@ -205,7 +205,7 @@ function PatientDashboard() {
   useEffect(() => {
     if (!patientDepartment) { setAssignedDoctor(''); return; }
     const fetchDoctor = async () => {
-      const snap = await getDocs(query(collection(db, 'doctors'), where('department', '==', patientDepartment)));
+      const snap = await getDocs(query(collection(db, 'hospitals', getHospitalId(), 'doctors'), where('department', '==', patientDepartment)));
       if (!snap.empty) setAssignedDoctor(snap.docs[0].data().name || '');
       else setAssignedDoctor('');
     };

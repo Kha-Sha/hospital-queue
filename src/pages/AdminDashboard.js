@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, db, firebaseConfig } from '../firebase';
+import { auth, db, firebaseConfig, getHospitalId } from '../firebase';
 import { signOut, createUserWithEmailAndPassword, getAuth } from 'firebase/auth';
 import { initializeApp } from 'firebase/app';
 import { collection, query, where, onSnapshot, doc, setDoc, updateDoc, getDocs, getDoc, serverTimestamp, deleteDoc, runTransaction } from 'firebase/firestore';
@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { QRCodeCanvas as QRCode } from 'qrcode.react';
 import { DEPARTMENTS } from '../constants';
 
-const QR_URL = 'https://hospital-queue-kappa.vercel.app/patient-register';
+const BASE_URL = 'https://hospital-queue-kappa.vercel.app';
 
 function AdminDashboard() {
   const navigate = useNavigate();
@@ -42,13 +42,16 @@ function AdminDashboard() {
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [editingWhatsapp, setEditingWhatsapp] = useState(false);
 
+  // hospital-scoped QR URL — embeds admin UID so patients register under the right hospital
+  const qrUrl = `${BASE_URL}/patient-register?hospital=${auth.currentUser?.uid || ''}`;
+
   useEffect(() => {
     if (!auth.currentUser) { navigate('/admin-login'); return; }
     if (!auth.currentUser.email?.endsWith('@hospital-admin.com')) { navigate('/admin-login'); return; }
-    localStorage.setItem('hospitalId', auth.currentUser.uid);
+    localStorage.setItem('qalm_hospital_id', auth.currentUser.uid);
 
     const checkAndResetQueue = async () => {
-      const settingsRef = doc(db, 'settings', 'hospital');
+      const settingsRef = doc(db, 'hospitals', getHospitalId(), 'settings', 'hospital');
       const settingsSnap = await getDoc(settingsRef);
       if (!settingsSnap.exists() || !settingsSnap.data().hospitalName) {
         navigate('/admin-setup');
@@ -57,18 +60,18 @@ function AdminDashboard() {
       const today = new Date().toDateString();
       const lastReset = settingsSnap.data().lastReset;
       if (lastReset !== today) {
-        const snap = await getDocs(query(collection(db, 'queue'), where('status', '==', 'waiting')));
-        await Promise.all(snap.docs.map(d => updateDoc(doc(db, 'queue', d.id), { status: 'cancelled' })));
+        const snap = await getDocs(query(collection(db, 'hospitals', getHospitalId(), 'queue'), where('status', '==', 'waiting')));
+        await Promise.all(snap.docs.map(d => updateDoc(doc(db, 'hospitals', getHospitalId(), 'queue', d.id), { status: 'cancelled' })));
         await setDoc(settingsRef, { currentToken: 0, lastToken: 0, lastReset: today }, { merge: true });
-        const assignedSnap = await getDocs(query(collection(db, 'pending'), where('status', '==', 'assigned')));
-        await Promise.all(assignedSnap.docs.map(d => deleteDoc(doc(db, 'pending', d.id))));
-        const pendingSnap = await getDocs(query(collection(db, 'pending'), where('status', '==', 'pending')));
-        await Promise.all(pendingSnap.docs.map(d => deleteDoc(doc(db, 'pending', d.id))));
+        const assignedSnap = await getDocs(query(collection(db, 'hospitals', getHospitalId(), 'pending'), where('status', '==', 'assigned')));
+        await Promise.all(assignedSnap.docs.map(d => deleteDoc(doc(db, 'hospitals', getHospitalId(), 'pending', d.id))));
+        const pendingSnap = await getDocs(query(collection(db, 'hospitals', getHospitalId(), 'pending'), where('status', '==', 'pending')));
+        await Promise.all(pendingSnap.docs.map(d => deleteDoc(doc(db, 'hospitals', getHospitalId(), 'pending', d.id))));
       }
     };
     checkAndResetQueue();
 
-    const unsubSettings = onSnapshot(doc(db, 'settings', 'hospital'), (snap) => {
+    const unsubSettings = onSnapshot(doc(db, 'hospitals', getHospitalId(), 'settings', 'hospital'), (snap) => {
       if (snap.exists()) {
         setCurrentToken(snap.data().currentToken || 0);
         setHospitalName(snap.data().hospitalName || 'Your Hospital');
@@ -80,20 +83,20 @@ function AdminDashboard() {
       }
     });
 
-    const unsubPending = onSnapshot(query(collection(db, 'pending'), where('status', '==', 'pending')), (snap) => {
+    const unsubPending = onSnapshot(query(collection(db, 'hospitals', getHospitalId(), 'pending'), where('status', '==', 'pending')), (snap) => {
       setPendingPatients(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
 
-    const unsubWaiting = onSnapshot(query(collection(db, 'queue'), where('status', '==', 'waiting')), (snap) => {
+    const unsubWaiting = onSnapshot(query(collection(db, 'hospitals', getHospitalId(), 'queue'), where('status', '==', 'waiting')), (snap) => {
       const patients = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       patients.sort((a, b) => a.tokenNumber - b.tokenNumber);
       setQueue(patients);
       setWaitingCount(snap.size);
     });
 
-    const unsubCompleted = onSnapshot(query(collection(db, 'queue'), where('status', '==', 'completed')), (snap) => setCompletedCount(snap.size));
-    const unsubNoshow = onSnapshot(query(collection(db, 'queue'), where('status', '==', 'noshow')), (snap) => setNoshowCount(snap.size));
-    const unsubAdmins = onSnapshot(collection(db, 'admins'), (snap) => {
+    const unsubCompleted = onSnapshot(query(collection(db, 'hospitals', getHospitalId(), 'queue'), where('status', '==', 'completed')), (snap) => setCompletedCount(snap.size));
+    const unsubNoshow = onSnapshot(query(collection(db, 'hospitals', getHospitalId(), 'queue'), where('status', '==', 'noshow')), (snap) => setNoshowCount(snap.size));
+    const unsubAdmins = onSnapshot(collection(db, 'hospitals', getHospitalId(), 'admins'), (snap) => {
       setAdminsList(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
 
@@ -109,8 +112,8 @@ function AdminDashboard() {
 
   const assignDepartment = async (patient, department) => {
     try {
-      const settingsRef = doc(db, 'settings', 'hospital');
-      const newQueueRef = doc(collection(db, 'queue'));
+      const settingsRef = doc(db, 'hospitals', getHospitalId(), 'settings', 'hospital');
+      const newQueueRef = doc(collection(db, 'hospitals', getHospitalId(), 'queue'));
       await runTransaction(db, async (transaction) => {
         const settingsDoc = await transaction.get(settingsRef);
         const lastToken = settingsDoc.exists() ? settingsDoc.data().lastToken || 0 : 0;
@@ -120,36 +123,36 @@ function AdminDashboard() {
           userId: patient.userId, name: patient.name, phone: patient.phone,
           department, tokenNumber: newToken, status: 'waiting', checkInTime: serverTimestamp(),
         });
-        transaction.update(doc(db, 'pending', patient.id), { status: 'assigned' });
+        transaction.update(doc(db, 'hospitals', getHospitalId(), 'pending', patient.id), { status: 'assigned' });
       });
     } catch (err) { console.error(err); }
   };
 
-  const markComplete = async (id) => await updateDoc(doc(db, 'queue', id), { status: 'completed' });
-  const markNoShow = async (id) => await updateDoc(doc(db, 'queue', id), { status: 'noshow' });
+  const markComplete = async (id) => await updateDoc(doc(db, 'hospitals', getHospitalId(), 'queue', id), { status: 'completed' });
+  const markNoShow = async (id) => await updateDoc(doc(db, 'hospitals', getHospitalId(), 'queue', id), { status: 'noshow' });
   const handleLogout = async () => { await signOut(auth); navigate('/'); };
 
   const saveHospitalName = async () => {
     setEditingName(false);
     if (!hospitalName.trim()) return;
-    await setDoc(doc(db, 'settings', 'hospital'), { hospitalName: hospitalName.trim() }, { merge: true });
+    await setDoc(doc(db, 'hospitals', getHospitalId(), 'settings', 'hospital'), { hospitalName: hospitalName.trim() }, { merge: true });
   };
 
   const saveWhatsappNumber = async () => {
     setEditingWhatsapp(false);
-    await setDoc(doc(db, 'settings', 'hospital'), { whatsappNumber: whatsappNumber.trim() }, { merge: true });
+    await setDoc(doc(db, 'hospitals', getHospitalId(), 'settings', 'hospital'), { whatsappNumber: whatsappNumber.trim() }, { merge: true });
   };
 
   const resetQueue = async () => {
     if (!window.confirm('Reset entire queue? This will cancel all waiting patients and reset token counters to 0.')) return;
     try {
-      const snap = await getDocs(query(collection(db, 'queue'), where('status', '==', 'waiting')));
-      await Promise.all(snap.docs.map(d => updateDoc(doc(db, 'queue', d.id), { status: 'cancelled' })));
-      await setDoc(doc(db, 'settings', 'hospital'), { currentToken: 0, lastToken: 0, lastReset: new Date().toDateString() }, { merge: true });
-      const assignedSnap = await getDocs(query(collection(db, 'pending'), where('status', '==', 'assigned')));
-      await Promise.all(assignedSnap.docs.map(d => deleteDoc(doc(db, 'pending', d.id))));
-      const deptSnap = await getDocs(collection(db, 'departments'));
-      await Promise.all(deptSnap.docs.map(d => setDoc(doc(db, 'departments', d.id), { currentToken: 0 }, { merge: true })));
+      const snap = await getDocs(query(collection(db, 'hospitals', getHospitalId(), 'queue'), where('status', '==', 'waiting')));
+      await Promise.all(snap.docs.map(d => updateDoc(doc(db, 'hospitals', getHospitalId(), 'queue', d.id), { status: 'cancelled' })));
+      await setDoc(doc(db, 'hospitals', getHospitalId(), 'settings', 'hospital'), { currentToken: 0, lastToken: 0, lastReset: new Date().toDateString() }, { merge: true });
+      const assignedSnap = await getDocs(query(collection(db, 'hospitals', getHospitalId(), 'pending'), where('status', '==', 'assigned')));
+      await Promise.all(assignedSnap.docs.map(d => deleteDoc(doc(db, 'hospitals', getHospitalId(), 'pending', d.id))));
+      const deptSnap = await getDocs(collection(db, 'hospitals', getHospitalId(), 'departments'));
+      await Promise.all(deptSnap.docs.map(d => setDoc(doc(db, 'hospitals', getHospitalId(), 'departments', d.id), { currentToken: 0 }, { merge: true })));
     } catch (err) { console.error(err); }
   };
 
@@ -161,7 +164,10 @@ function AdminDashboard() {
     const secondaryAuth = getAuth(secondaryApp);
     try {
       const credential = await createUserWithEmailAndPassword(secondaryAuth, doctorPhone + '@hospital-doctor.com', doctorPassword);
-      await setDoc(doc(db, 'doctors', credential.user.uid), { name: doctorName, phone: doctorPhone, department: doctorDept });
+      // Global lookup so doctor can find their hospitalId at login time
+      await setDoc(doc(db, 'doctors', credential.user.uid), { hospitalId: getHospitalId() });
+      // Full info stored under hospital namespace
+      await setDoc(doc(db, 'hospitals', getHospitalId(), 'doctors', credential.user.uid), { name: doctorName, phone: doctorPhone, department: doctorDept });
       setDoctorName(''); setDoctorPhone(''); setDoctorPassword(''); setDoctorDept('General OPD');
       setShowAddDoctor(false);
     } catch (err) {
@@ -173,12 +179,12 @@ function AdminDashboard() {
   };
 
   const togglePause = async () => {
-    await setDoc(doc(db, 'settings', 'hospital'), { queuePaused: !queuePaused }, { merge: true });
+    await setDoc(doc(db, 'hospitals', getHospitalId(), 'settings', 'hospital'), { queuePaused: !queuePaused }, { merge: true });
   };
 
   const prioritizePatient = async (patient) => {
     const lowestToken = queue.length > 0 ? queue[0].tokenNumber : 1;
-    await updateDoc(doc(db, 'queue', patient.id), { tokenNumber: lowestToken - 0.5 });
+    await updateDoc(doc(db, 'hospitals', getHospitalId(), 'queue', patient.id), { tokenNumber: lowestToken - 0.5 });
   };
 
   const addStaff = async (e) => {
@@ -189,9 +195,9 @@ function AdminDashboard() {
     const secondaryAuth = getAuth(secondaryApp);
     try {
       const credential = await createUserWithEmailAndPassword(secondaryAuth, staffPhone + '@hospital-admin.com', staffPassword);
-      await setDoc(doc(db, 'admins', credential.user.uid), {
+      await setDoc(doc(db, 'hospitals', getHospitalId(), 'admins', credential.user.uid), {
         name: staffName, phone: staffPhone,
-        hospitalId: auth.currentUser.uid,
+        hospitalId: getHospitalId(),
         createdAt: serverTimestamp(),
       });
       setStaffName(''); setStaffPhone(''); setStaffPassword('');
@@ -206,7 +212,7 @@ function AdminDashboard() {
   // printQR: open print window with QR code
   const printQRCode = () => {
     const win = window.open('', '_blank', 'width=600,height=700');
-    win.document.write(`<!DOCTYPE html><html><head><title>QR Code</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:40px;text-align:center}h1{font-size:22px;font-weight:700;margin-bottom:6px}p{color:#555;font-size:15px;margin:4px 0}.sub{font-size:12px;color:#aaa;margin-top:12px}img{margin:28px 0;border:1px solid #e5e7eb;padding:12px;border-radius:8px}</style></head><body><h1>${hospitalName}</h1><p>Scan to check in</p><img src="https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(QR_URL)}" width="260" height="260" onload="window.print()"/><p class="sub">${QR_URL}</p></body></html>`);
+    win.document.write(`<!DOCTYPE html><html><head><title>QR Code</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:40px;text-align:center}h1{font-size:22px;font-weight:700;margin-bottom:6px}p{color:#555;font-size:15px;margin:4px 0}.sub{font-size:12px;color:#aaa;margin-top:12px}img{margin:28px 0;border:1px solid #e5e7eb;padding:12px;border-radius:8px}</style></head><body><h1>${hospitalName}</h1><p>Scan to check in</p><img src="https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(qrUrl)}" width="260" height="260" onload="window.print()"/><p class="sub">${qrUrl}</p></body></html>`);
     win.document.close();
   };
 
@@ -380,16 +386,11 @@ function AdminDashboard() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{
-              width: '100%',
-              padding: '12px 16px',
+              width: '100%', padding: '12px 16px',
               background: 'rgba(255,255,255,0.05)',
               border: `1px solid ${searchQuery ? 'rgba(96,165,250,0.35)' : 'rgba(255,255,255,0.08)'}`,
-              borderRadius: '12px',
-              fontSize: '14px',
-              color: 'white',
-              boxSizing: 'border-box',
-              outline: 'none',
-              transition: 'border-color 0.2s',
+              borderRadius: '12px', fontSize: '14px', color: 'white',
+              boxSizing: 'border-box', outline: 'none', transition: 'border-color 0.2s',
             }}
           />
         </div>
@@ -574,7 +575,7 @@ function AdminDashboard() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}
           style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '24px', padding: '28px', backdropFilter: 'blur(20px)', display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
           <div style={{ background: 'white', padding: '12px', borderRadius: '12px', display: 'inline-block' }}>
-            <QRCode value={QR_URL} size={100} bgColor="white" fgColor="#060d1a" />
+            <QRCode value={qrUrl} size={100} bgColor="white" fgColor="#060d1a" />
           </div>
           <div style={{ flex: 1 }}>
             <h3 style={{ color: 'white', margin: '0 0 8px 0', fontSize: '16px', fontWeight: '700' }}>Patient Check-in QR Code</h3>

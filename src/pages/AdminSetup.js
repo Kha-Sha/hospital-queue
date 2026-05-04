@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, db } from '../firebase';
+import { auth, db, getHospitalId } from '../firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DEPARTMENTS } from '../constants';
@@ -31,17 +31,17 @@ function AdminSetup() {
     setSaving(true);
     setSetupError('');
     try {
+      if (auth.currentUser) {
+        localStorage.setItem('qalm_hospital_id', auth.currentUser.uid);
+      }
       const today = new Date().toDateString();
-      await setDoc(doc(db, 'settings', 'hospital'), {
+      await setDoc(doc(db, 'hospitals', getHospitalId(), 'settings', 'hospital'), {
         hospitalName: hospitalName.trim(),
         activeDepartments: [...activeDepts],
         currentToken: 0,
         lastToken: 0,
         lastReset: today,
       }, { merge: true });
-      if (auth.currentUser) {
-        localStorage.setItem('hospitalId', auth.currentUser.uid);
-      }
       setStep(3);
     } catch (err) {
       setSetupError('Failed to save settings. Please check your connection and try again.');

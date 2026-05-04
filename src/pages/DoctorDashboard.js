@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, db } from '../firebase';
+import { auth, db, getHospitalId } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { collection, query, where, onSnapshot, doc, getDoc, runTransaction } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -23,7 +23,7 @@ function DoctorDashboard() {
 
     const fetchDoctorInfo = async () => {
       try {
-        const snap = await getDoc(doc(db, 'doctors', auth.currentUser.uid));
+        const snap = await getDoc(doc(db, 'hospitals', getHospitalId(), 'doctors', auth.currentUser.uid));
         if (snap.exists()) {
           setDoctorName(snap.data().name || 'Doctor');
           setDepartment(snap.data().department || 'General OPD');
@@ -41,11 +41,11 @@ function DoctorDashboard() {
   useEffect(() => {
     if (!department) return;
 
-    const unsubSettings = onSnapshot(doc(db, 'departments', department), (snap) => {
+    const unsubSettings = onSnapshot(doc(db, 'hospitals', getHospitalId(), 'departments', department), (snap) => {
       if (snap.exists()) setCurrentToken(snap.data().currentToken || 0);
     });
 
-    const waitingQ = query(collection(db, 'queue'), where('status', '==', 'waiting'), where('department', '==', department));
+    const waitingQ = query(collection(db, 'hospitals', getHospitalId(), 'queue'), where('status', '==', 'waiting'), where('department', '==', department));
     const unsubWaiting = onSnapshot(waitingQ, (snapshot) => {
       const patients = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       patients.sort((a, b) => a.tokenNumber - b.tokenNumber);
@@ -53,7 +53,7 @@ function DoctorDashboard() {
       setNextToken(patients[0] || null);
     });
 
-    const completedQ = query(collection(db, 'queue'), where('status', '==', 'completed'), where('department', '==', department));
+    const completedQ = query(collection(db, 'hospitals', getHospitalId(), 'queue'), where('status', '==', 'completed'), where('department', '==', department));
     const unsubCompleted = onSnapshot(completedQ, (snap) => setCompletedCount(snap.size));
 
     return () => { unsubSettings(); unsubWaiting(); unsubCompleted(); };
@@ -63,8 +63,8 @@ function DoctorDashboard() {
     if (calling || !nextToken) return;
     setCalling(true);
     try {
-      const deptRef = doc(db, 'departments', department);
-      const queueRef = doc(db, 'queue', nextToken.id);
+      const deptRef = doc(db, 'hospitals', getHospitalId(), 'departments', department);
+      const queueRef = doc(db, 'hospitals', getHospitalId(), 'queue', nextToken.id);
       await runTransaction(db, async (transaction) => {
         transaction.set(deptRef, { currentToken: nextToken.tokenNumber }, { merge: true });
         transaction.update(queueRef, { status: 'completed' });

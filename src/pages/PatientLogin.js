@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth } from '../firebase';
+import { auth, db, getHospitalId } from '../firebase';
 import { useLanguage, LanguageSwitcher } from '../LanguageContext';
 import { signInWithEmailAndPassword } from 'firebase/auth';
+import { doc, getDoc, getDocs, setDoc, collection, query, where, serverTimestamp } from 'firebase/firestore';
 import { motion } from 'framer-motion';
 import ParticleCanvas from '../components/ParticleCanvas';
 
@@ -38,27 +39,31 @@ function PatientLogin() {
     }
 
     try {
-      const { getDoc, doc, setDoc, getDocs, collection, query, where, serverTimestamp } = await import('firebase/firestore');
-      const { db } = await import('../firebase');
       const patientSnap = await getDoc(doc(db, 'patients', user.uid));
       const patientData = patientSnap.exists() ? patientSnap.data() : {};
 
-      const existingQ = query(collection(db, 'queue'), where('userId', '==', user.uid), where('status', '==', 'waiting'));
-      const existingSnap = await getDocs(existingQ);
+      // Restore the hospital context so all subsequent Firestore reads use the right namespace
+      localStorage.setItem('qalm_hospital_id', patientData.hospitalId || 'default');
+
+      const existingSnap = await getDocs(query(
+        collection(db, 'hospitals', getHospitalId(), 'queue'),
+        where('userId', '==', user.uid),
+        where('status', '==', 'waiting')
+      ));
       if (!existingSnap.empty) {
         navigate('/patient-dashboard');
         setLoading(false);
         return;
       }
 
-      const pendingSnap = await getDoc(doc(db, 'pending', user.uid));
+      const pendingSnap = await getDoc(doc(db, 'hospitals', getHospitalId(), 'pending', user.uid));
       if (pendingSnap.exists() && pendingSnap.data().status === 'pending') {
         navigate('/patient-dashboard');
         setLoading(false);
         return;
       }
 
-      await setDoc(doc(db, 'pending', user.uid), {
+      await setDoc(doc(db, 'hospitals', getHospitalId(), 'pending', user.uid), {
         name: patientData.name || phone,
         phone: patientData.phone || phone,
         userId: user.uid,
