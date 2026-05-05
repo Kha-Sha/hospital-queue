@@ -2,6 +2,12 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Public lead submissions from landing page — write-only, no auth required
+    match /leads/{docId} {
+      allow create: if true;
+      allow read, update, delete: if false;
+    }
+
     // Global patient profiles — read/write own record only
     match /patients/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;

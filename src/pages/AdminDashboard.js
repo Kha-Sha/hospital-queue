@@ -10,6 +10,11 @@ import { DEPARTMENTS } from '../constants';
 
 const BASE_URL = 'https://hospital-queue-kappa.vercel.app';
 
+const fmtPhone = (phone) => {
+  const d = (phone || '').replace(/\D/g, '');
+  return d.length === 10 ? '91' + d : d;
+};
+
 function AdminDashboard() {
   const navigate = useNavigate();
   const [queue, setQueue] = useState([]);
@@ -29,7 +34,7 @@ function AdminDashboard() {
   const [hospitalName, setHospitalName] = useState('Your Hospital');
   const [editingName, setEditingName] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
-  const [activeDepartments, setActiveDepartments] = useState(DEPARTMENTS); // activeDepartments
+  const [activeDepartments, setActiveDepartments] = useState(DEPARTMENTS);
   const [searchQuery, setSearchQuery] = useState('');
   const [queuePaused, setQueuePaused] = useState(false);
   const [showStaffMgmt, setShowStaffMgmt] = useState(false);
@@ -41,8 +46,18 @@ function AdminDashboard() {
   const [adminsList, setAdminsList] = useState([]);
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [editingWhatsapp, setEditingWhatsapp] = useState(false);
+  // F1 – WhatsApp reminders
+  const [showReminders, setShowReminders] = useState(false);
+  // F2 – No-show recovery
+  const [recentNoShows, setRecentNoShows] = useState([]);
+  // F3 – Patient recall
+  const [showRecall, setShowRecall] = useState(false);
+  const [recallPatients, setRecallPatients] = useState([]);
+  const [recallLoading, setRecallLoading] = useState(false);
+  // F4 – Google Place ID
+  const [googlePlaceId, setGooglePlaceId] = useState('');
+  const [editingPlaceId, setEditingPlaceId] = useState(false);
 
-  // hospital-scoped QR URL — embeds admin UID so patients register under the right hospital
   const qrUrl = `${BASE_URL}/patient-register?hospital=${auth.currentUser?.uid || ''}`;
 
   useEffect(() => {
@@ -53,10 +68,7 @@ function AdminDashboard() {
     const checkAndResetQueue = async () => {
       const settingsRef = doc(db, 'hospitals', getHospitalId(), 'settings', 'hospital');
       const settingsSnap = await getDoc(settingsRef);
-      if (!settingsSnap.exists() || !settingsSnap.data().hospitalName) {
-        navigate('/admin-setup');
-        return;
-      }
+      if (!settingsSnap.exists() || !settingsSnap.data().hospitalName) { navigate('/admin-setup'); return; }
       const today = new Date().toDateString();
       const lastReset = settingsSnap.data().lastReset;
       if (lastReset !== today) {
@@ -77,9 +89,8 @@ function AdminDashboard() {
         setHospitalName(snap.data().hospitalName || 'Your Hospital');
         setQueuePaused(snap.data().queuePaused || false);
         setWhatsappNumber(snap.data().whatsappNumber || '');
-        if (snap.data().activeDepartments?.length) {
-          setActiveDepartments(snap.data().activeDepartments); // activeDepartments
-        }
+        setGooglePlaceId(snap.data().googlePlaceId || '');
+        if (snap.data().activeDepartments?.length) setActiveDepartments(snap.data().activeDepartments);
       }
     });
 
@@ -103,11 +114,8 @@ function AdminDashboard() {
     return () => { unsubSettings(); unsubPending(); unsubWaiting(); unsubCompleted(); unsubNoshow(); unsubAdmins(); };
   }, [navigate]);
 
-  // departmentTabs: auto-switch to All when selected dept becomes empty
   useEffect(() => {
-    if (selectedDept !== 'All' && !queue.some(p => p.department === selectedDept)) {
-      setSelectedDept('All');
-    }
+    if (selectedDept !== 'All' && !queue.some(p => p.department === selectedDept)) setSelectedDept('All');
   }, [queue, selectedDept]);
 
   const assignDepartment = async (patient, department) => {
@@ -129,7 +137,12 @@ function AdminDashboard() {
   };
 
   const markComplete = async (id) => await updateDoc(doc(db, 'hospitals', getHospitalId(), 'queue', id), { status: 'completed' });
-  const markNoShow = async (id) => await updateDoc(doc(db, 'hospitals', getHospitalId(), 'queue', id), { status: 'noshow' });
+
+  const markNoShow = async (patient) => {
+    await updateDoc(doc(db, 'hospitals', getHospitalId(), 'queue', patient.id), { status: 'noshow' });
+    setRecentNoShows(prev => [...prev.filter(p => p.id !== patient.id), { ...patient, noShowAt: new Date() }]);
+  };
+
   const handleLogout = async () => { await signOut(auth); navigate('/'); };
 
   const saveHospitalName = async () => {
@@ -141,6 +154,11 @@ function AdminDashboard() {
   const saveWhatsappNumber = async () => {
     setEditingWhatsapp(false);
     await setDoc(doc(db, 'hospitals', getHospitalId(), 'settings', 'hospital'), { whatsappNumber: whatsappNumber.trim() }, { merge: true });
+  };
+
+  const saveGooglePlaceId = async () => {
+    setEditingPlaceId(false);
+    await setDoc(doc(db, 'hospitals', getHospitalId(), 'settings', 'hospital'), { googlePlaceId: googlePlaceId.trim() }, { merge: true });
   };
 
   const resetQueue = async () => {
@@ -157,24 +175,17 @@ function AdminDashboard() {
   };
 
   const addDoctor = async (e) => {
-    e.preventDefault();
-    setDoctorError('');
-    setAddingDoctor(true);
+    e.preventDefault(); setDoctorError(''); setAddingDoctor(true);
     const secondaryApp = initializeApp(firebaseConfig, `secondary-${Date.now()}`);
     const secondaryAuth = getAuth(secondaryApp);
     try {
       const credential = await createUserWithEmailAndPassword(secondaryAuth, doctorPhone + '@hospital-doctor.com', doctorPassword);
-      // Global lookup so doctor can find their hospitalId at login time
       await setDoc(doc(db, 'doctors', credential.user.uid), { hospitalId: getHospitalId() });
-      // Full info stored under hospital namespace
       await setDoc(doc(db, 'hospitals', getHospitalId(), 'doctors', credential.user.uid), { name: doctorName, phone: doctorPhone, department: doctorDept });
       setDoctorName(''); setDoctorPhone(''); setDoctorPassword(''); setDoctorDept('General OPD');
       setShowAddDoctor(false);
-    } catch (err) {
-      setDoctorError(err.message);
-    } finally {
-      await secondaryApp.delete();
-    }
+    } catch (err) { setDoctorError(err.message); }
+    finally { await secondaryApp.delete(); }
     setAddingDoctor(false);
   };
 
@@ -188,32 +199,45 @@ function AdminDashboard() {
   };
 
   const addStaff = async (e) => {
-    e.preventDefault();
-    setStaffError('');
-    setAddingStaff(true);
+    e.preventDefault(); setStaffError(''); setAddingStaff(true);
     const secondaryApp = initializeApp(firebaseConfig, `secondary-staff-${Date.now()}`);
     const secondaryAuth = getAuth(secondaryApp);
     try {
       const credential = await createUserWithEmailAndPassword(secondaryAuth, staffPhone + '@hospital-admin.com', staffPassword);
       await setDoc(doc(db, 'hospitals', getHospitalId(), 'admins', credential.user.uid), {
-        name: staffName, phone: staffPhone,
-        hospitalId: getHospitalId(),
-        createdAt: serverTimestamp(),
+        name: staffName, phone: staffPhone, hospitalId: getHospitalId(), createdAt: serverTimestamp(),
       });
       setStaffName(''); setStaffPhone(''); setStaffPassword('');
-    } catch (err) {
-      setStaffError(err.message);
-    } finally {
-      await secondaryApp.delete();
-      setAddingStaff(false);
-    }
+    } catch (err) { setStaffError(err.message); }
+    finally { await secondaryApp.delete(); setAddingStaff(false); }
   };
 
-  // printQR: open print window with QR code
   const printQRCode = () => {
     const win = window.open('', '_blank', 'width=600,height=700');
     win.document.write(`<!DOCTYPE html><html><head><title>QR Code</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:40px;text-align:center}h1{font-size:22px;font-weight:700;margin-bottom:6px}p{color:#555;font-size:15px;margin:4px 0}.sub{font-size:12px;color:#aaa;margin-top:12px}img{margin:28px 0;border:1px solid #e5e7eb;padding:12px;border-radius:8px}</style></head><body><h1>${hospitalName}</h1><p>Scan to check in</p><img src="https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(qrUrl)}" width="260" height="260" onload="window.print()"/><p class="sub">${qrUrl}</p></body></html>`);
     win.document.close();
+  };
+
+  const loadRecallPatients = async () => {
+    setRecallLoading(true);
+    try {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const snap = await getDocs(query(collection(db, 'hospitals', getHospitalId(), 'queue'), where('status', '==', 'completed')));
+      const allCompleted = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const oldVisits = allCompleted.filter(p => {
+        const ts = p.checkInTime?.seconds || 0;
+        return ts > 0 && new Date(ts * 1000) < thirtyDaysAgo;
+      });
+      const byUser = {};
+      oldVisits.forEach(p => {
+        const visitDate = new Date((p.checkInTime?.seconds || 0) * 1000);
+        if (!byUser[p.userId] || visitDate > byUser[p.userId].visitDate) {
+          byUser[p.userId] = { ...p, visitDate };
+        }
+      });
+      setRecallPatients(Object.values(byUser).sort((a, b) => a.visitDate - b.visitDate).slice(0, 20));
+    } catch (err) { console.error(err); }
+    setRecallLoading(false);
   };
 
   const analyticsTotal = completedCount + waitingCount + noshowCount;
@@ -225,7 +249,7 @@ function AdminDashboard() {
   queue.forEach(p => { deptCounts[p.department] = (deptCounts[p.department] || 0) + 1; });
   const busiestDept = Object.entries(deptCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '—';
 
-  const activeDeptTabs = ['All', ...Object.keys(deptCounts).sort()]; // departmentTabs
+  const activeDeptTabs = ['All', ...Object.keys(deptCounts).sort()];
   const filteredQueue = queue
     .filter(p => selectedDept === 'All' || p.department === selectedDept)
     .filter(p => {
@@ -238,6 +262,11 @@ function AdminDashboard() {
     const q = searchQuery.toLowerCase();
     return (p.name || '').toLowerCase().includes(q) || (p.phone || '').toLowerCase().includes(q);
   });
+
+  // F1: patients at position 4+ (index >= 3) in the sorted queue
+  const reminderPatients = queue.filter((_, i) => i >= 3);
+
+  const isMobile = window.innerWidth < 600;
 
   return (
     <div style={{
@@ -302,7 +331,7 @@ function AdminDashboard() {
 
         {/* Stats */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-          style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 600 ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: '12px', marginBottom: '20px' }}>
+          style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: '12px', marginBottom: '20px' }}>
           {[
             { label: 'NOW CALLING', value: currentToken, color: '#60a5fa' },
             { label: 'WAITING', value: waitingCount, color: 'white' },
@@ -322,7 +351,7 @@ function AdminDashboard() {
             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.3 }} style={{ overflow: 'hidden', marginBottom: '16px' }}>
               <div style={{ background: 'rgba(99,102,241,0.04)', border: '1px solid rgba(99,102,241,0.12)', borderRadius: '24px', padding: '24px', backdropFilter: 'blur(20px)' }}>
                 <h3 style={{ color: '#818cf8', margin: '0 0 16px 0', fontSize: '15px', fontWeight: '700' }}>📊 Today's Analytics</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 600 ? 'repeat(2, 1fr)' : 'repeat(5, 1fr)', gap: '10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(5, 1fr)', gap: '10px' }}>
                   {[
                     { label: 'Total Patients', value: analyticsTotal },
                     { label: 'Completion Rate', value: completionRate },
@@ -349,7 +378,7 @@ function AdminDashboard() {
               <div style={{ padding: '16px 24px', borderBottom: '1px solid rgba(251,191,36,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h3 style={{ color: '#fbbf24', margin: 0, fontSize: '15px', fontWeight: '700' }}>⏳ New Arrivals — Assign Department</h3>
                 <span style={{ background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.2)', borderRadius: '20px', padding: '4px 12px', color: '#fbbf24', fontSize: '13px', fontWeight: '600' }}>
-                  {searchQuery && filteredPending.length !== pendingPatients.length ? `${filteredPending.length} of ${pendingPatients.length}` : `${pendingPatients.length}`} waiting
+                  {searchQuery && filteredPending.length !== pendingPatients.length ? `${filteredPending.length} of ${pendingPatients.length}` : pendingPatients.length} waiting
                 </span>
               </div>
               {filteredPending.map((patient, index) => (
@@ -363,7 +392,7 @@ function AdminDashboard() {
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                     <select defaultValue={patient.preferredDept || activeDepartments[0]} id={`dept-${patient.id}`}
                       style={{ padding: '8px 12px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', fontSize: '13px', outline: 'none', cursor: 'pointer' }}>
-                      {activeDepartments.map(dept => ( // activeDepartments
+                      {activeDepartments.map(dept => (
                         <option key={dept} value={dept} style={{ background: '#0f1f3d' }}>{dept}</option>
                       ))}
                     </select>
@@ -380,39 +409,23 @@ function AdminDashboard() {
 
         {/* Search */}
         <div style={{ marginBottom: '16px' }}>
-          <input
-            type="text"
-            placeholder="🔍  Search patient by name or phone..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              width: '100%', padding: '12px 16px',
-              background: 'rgba(255,255,255,0.05)',
-              border: `1px solid ${searchQuery ? 'rgba(96,165,250,0.35)' : 'rgba(255,255,255,0.08)'}`,
-              borderRadius: '12px', fontSize: '14px', color: 'white',
-              boxSizing: 'border-box', outline: 'none', transition: 'border-color 0.2s',
-            }}
-          />
+          <input type="text" placeholder="🔍  Search patient by name or phone..."
+            value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+            style={{ width: '100%', padding: '12px 16px', background: 'rgba(255,255,255,0.05)', border: `1px solid ${searchQuery ? 'rgba(96,165,250,0.35)' : 'rgba(255,255,255,0.08)'}`, borderRadius: '12px', fontSize: '14px', color: 'white', boxSizing: 'border-box', outline: 'none', transition: 'border-color 0.2s' }} />
         </div>
 
-        {/* departmentTabs: tab-style, only depts with waiting patients */}
+        {/* Department tabs */}
         <div style={{ marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '12px', display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
           {activeDeptTabs.map(dept => (
             <button key={dept} onClick={() => setSelectedDept(dept)} style={{
-              padding: '7px 14px',
-              background: selectedDept === dept ? 'rgba(37,99,235,0.2)' : 'transparent',
+              padding: '7px 14px', background: selectedDept === dept ? 'rgba(37,99,235,0.2)' : 'transparent',
               border: `1px solid ${selectedDept === dept ? 'rgba(37,99,235,0.4)' : 'transparent'}`,
-              borderRadius: '10px',
-              color: selectedDept === dept ? '#60a5fa' : 'rgba(255,255,255,0.4)',
+              borderRadius: '10px', color: selectedDept === dept ? '#60a5fa' : 'rgba(255,255,255,0.4)',
               cursor: 'pointer', fontSize: '13px', fontWeight: selectedDept === dept ? '700' : '500',
               display: 'inline-flex', alignItems: 'center', gap: '6px', transition: 'all 0.15s ease',
             }}>
               {dept}
-              <span style={{
-                background: selectedDept === dept ? 'rgba(37,99,235,0.35)' : 'rgba(255,255,255,0.08)',
-                borderRadius: '10px', padding: '1px 7px', fontSize: '11px', fontWeight: '700',
-                color: selectedDept === dept ? '#93c5fd' : 'rgba(255,255,255,0.3)',
-              }}>
+              <span style={{ background: selectedDept === dept ? 'rgba(37,99,235,0.35)' : 'rgba(255,255,255,0.08)', borderRadius: '10px', padding: '1px 7px', fontSize: '11px', fontWeight: '700', color: selectedDept === dept ? '#93c5fd' : 'rgba(255,255,255,0.3)' }}>
                 {dept === 'All' ? queue.length : (deptCounts[dept] || 0)}
               </span>
             </button>
@@ -439,7 +452,7 @@ function AdminDashboard() {
                 <motion.div key={patient.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} transition={{ delay: index * 0.05 }}
                   style={{ padding: '16px 24px', borderBottom: index < filteredQueue.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: isCalled ? 'rgba(239,68,68,0.05)' : index === 0 ? 'rgba(37,99,235,0.06)' : 'transparent' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <div style={{ width: '44px', height: '44px', borderRadius: '14px', background: isCalled ? 'rgba(239,68,68,0.15)' : index === 0 ? 'linear-gradient(135deg, #1d4ed8, #3b82f6)' : 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', color: isCalled ? '#f87171' : index === 0 ? 'white' : 'rgba(255,255,255,0.5)', fontSize: '16px', boxShadow: !isCalled && index === 0 ? '0 4px 16px rgba(37,99,235,0.4)' : 'none' }}>
+                    <div style={{ width: '44px', height: '44px', borderRadius: '14px', background: isCalled ? 'rgba(239,68,68,0.15)' : index === 0 ? 'linear-gradient(135deg, #1d4ed8, #3b82f6)' : 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', color: isCalled ? '#f87171' : index === 0 ? 'white' : 'rgba(255,255,255,0.5)', fontSize: '16px', flexShrink: 0 }}>
                       {patient.tokenNumber}
                     </div>
                     <div>
@@ -459,13 +472,86 @@ function AdminDashboard() {
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                     <button onClick={() => prioritizePatient(patient)} style={{ padding: '7px 14px', background: 'rgba(168,85,247,0.1)', color: '#a855f7', border: '1px solid rgba(168,85,247,0.2)', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>⬆ Priority</button>
                     <button onClick={() => markComplete(patient.id)} style={{ padding: '7px 14px', background: 'rgba(74,222,128,0.1)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.2)', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>✓ Done</button>
-                    <button onClick={() => markNoShow(patient.id)} style={{ padding: '7px 14px', background: 'rgba(251,191,36,0.08)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.15)', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>✗ No Show</button>
+                    <button onClick={() => markNoShow(patient)} style={{ padding: '7px 14px', background: 'rgba(251,191,36,0.08)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.15)', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>✗ No Show</button>
                   </div>
                 </motion.div>
               );
             })}
           </AnimatePresence>
         </motion.div>
+
+        {/* F1 — WhatsApp Reminders */}
+        {reminderPatients.length > 0 && (
+          <div style={{ marginBottom: '16px' }}>
+            <button onClick={() => setShowReminders(s => !s)}
+              style={{ width: '100%', padding: '14px 20px', background: showReminders ? 'rgba(37,211,102,0.1)' : 'rgba(37,211,102,0.06)', border: `1px solid ${showReminders ? 'rgba(37,211,102,0.3)' : 'rgba(37,211,102,0.15)'}`, borderRadius: showReminders ? '16px 16px 0 0' : '16px', color: '#25D366', cursor: 'pointer', fontSize: '14px', fontWeight: '600', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>📱 WhatsApp Reminders — {reminderPatients.length} patient{reminderPatients.length !== 1 ? 's' : ''} waiting long</span>
+              <span style={{ fontSize: '12px', opacity: 0.7 }}>{showReminders ? '▲' : '▼'}</span>
+            </button>
+            <AnimatePresence>
+              {showReminders && (
+                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} style={{ overflow: 'hidden' }}>
+                  <div style={{ background: 'rgba(37,211,102,0.04)', border: '1px solid rgba(37,211,102,0.15)', borderTop: 'none', borderRadius: '0 0 16px 16px', padding: '4px 0' }}>
+                    <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '11px', padding: '12px 20px 4px', letterSpacing: '0.5px' }}>
+                      Patients 4+ positions away — tap to open WhatsApp and send a wait-time reminder.
+                    </p>
+                    {reminderPatients.map((patient, idx) => {
+                      const positionIdx = queue.indexOf(patient);
+                      const waitMin = positionIdx * 10;
+                      const msg = encodeURIComponent(`Namaskar ${patient.name}, your token is ${patient.tokenNumber} at ${hospitalName}. You have approximately ${waitMin} minutes wait. Please come to reception.`);
+                      return (
+                        <div key={patient.id} style={{ padding: '12px 20px', borderBottom: idx < reminderPatients.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                          <div>
+                            <p style={{ color: 'white', fontSize: '14px', fontWeight: '600', margin: 0 }}>{patient.name}</p>
+                            <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '12px', margin: '2px 0 0 0' }}>
+                              Token #{patient.tokenNumber} · {patient.department} · ~{waitMin} min wait
+                            </p>
+                          </div>
+                          <a href={`https://wa.me/${fmtPhone(patient.phone)}?text=${msg}`} target="_blank" rel="noopener noreferrer"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 16px', background: '#25D366', border: 'none', borderRadius: '8px', color: 'white', fontSize: '13px', fontWeight: '600', textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                            Send Reminder
+                          </a>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+
+        {/* F2 — No-Show Recovery */}
+        <AnimatePresence>
+          {recentNoShows.length > 0 && (
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+              style={{ background: 'rgba(251,191,36,0.04)', border: '1px solid rgba(251,191,36,0.15)', borderRadius: '20px', overflow: 'hidden', marginBottom: '16px' }}>
+              <div style={{ padding: '14px 20px', borderBottom: '1px solid rgba(251,191,36,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 style={{ color: '#fbbf24', margin: 0, fontSize: '14px', fontWeight: '700' }}>🔴 Recent No-Shows — Send Recovery Message</h3>
+                <button onClick={() => setRecentNoShows([])} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)', cursor: 'pointer', fontSize: '18px', lineHeight: 1, padding: '0 4px' }}>×</button>
+              </div>
+              {recentNoShows.map((patient, idx) => {
+                const msg = encodeURIComponent(`Namaskar ${patient.name}, your token ${patient.tokenNumber} was called at ${hospitalName} but you were not present. Please visit reception to reschedule.`);
+                return (
+                  <div key={patient.id} style={{ padding: '12px 20px', borderBottom: idx < recentNoShows.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                    <div>
+                      <p style={{ color: 'white', fontSize: '14px', fontWeight: '600', margin: 0 }}>{patient.name}</p>
+                      <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '12px', margin: '2px 0 0 0' }}>Token #{patient.tokenNumber} · {patient.department}</p>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <a href={`https://wa.me/${fmtPhone(patient.phone)}?text=${msg}`} target="_blank" rel="noopener noreferrer"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 14px', background: '#25D366', borderRadius: '8px', color: 'white', fontSize: '13px', fontWeight: '600', textDecoration: 'none' }}>
+                        Send Recovery
+                      </a>
+                      <button onClick={() => setRecentNoShows(prev => prev.filter(p => p.id !== patient.id))}
+                        style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)', cursor: 'pointer', fontSize: '16px', padding: '4px' }}>×</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Add Doctor */}
         <AnimatePresence>
@@ -474,14 +560,12 @@ function AdminDashboard() {
               style={{ background: 'rgba(74,222,128,0.04)', border: '1px solid rgba(74,222,128,0.12)', borderRadius: '24px', padding: '24px', marginBottom: '16px', overflow: 'hidden' }}>
               <h3 style={{ color: '#4ade80', margin: '0 0 20px 0', fontSize: '15px', fontWeight: '700' }}>+ Add Doctor Account</h3>
               <form onSubmit={addDoctor}>
-                <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 600 ? '1fr' : '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                   <input placeholder="Doctor Name" value={doctorName} onChange={e => setDoctorName(e.target.value)} required style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', fontSize: '14px', outline: 'none' }} />
                   <input placeholder="Phone Number" value={doctorPhone} onChange={e => setDoctorPhone(e.target.value)} required style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', fontSize: '14px', outline: 'none' }} />
                   <input placeholder="Password" type="password" value={doctorPassword} onChange={e => setDoctorPassword(e.target.value)} required style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', fontSize: '14px', outline: 'none' }} />
                   <select value={doctorDept} onChange={e => setDoctorDept(e.target.value)} style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', fontSize: '14px', outline: 'none', cursor: 'pointer' }}>
-                    {activeDepartments.map(dept => ( // activeDepartments
-                      <option key={dept} value={dept} style={{ background: '#0f1f3d' }}>{dept}</option>
-                    ))}
+                    {activeDepartments.map(dept => (<option key={dept} value={dept} style={{ background: '#0f1f3d' }}>{dept}</option>))}
                   </select>
                 </div>
                 {doctorError && <p style={{ color: '#fca5a5', fontSize: '13px', marginBottom: '12px' }}>{doctorError}</p>}
@@ -492,6 +576,56 @@ function AdminDashboard() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* F3 — Patient Recall */}
+        <div style={{ marginBottom: '16px' }}>
+          <button onClick={() => {
+            const next = !showRecall;
+            setShowRecall(next);
+            if (next && recallPatients.length === 0 && !recallLoading) loadRecallPatients();
+          }} style={{ width: '100%', padding: '14px 20px', background: showRecall ? 'rgba(251,191,36,0.1)' : 'rgba(251,191,36,0.05)', border: `1px solid ${showRecall ? 'rgba(251,191,36,0.3)' : 'rgba(251,191,36,0.12)'}`, borderRadius: showRecall ? '16px 16px 0 0' : '16px', color: '#fbbf24', cursor: 'pointer', fontSize: '14px', fontWeight: '600', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>🔄 Patient Recall — Re-engage patients not seen in 30+ days</span>
+            <span style={{ fontSize: '12px', opacity: 0.7 }}>{showRecall ? '▲' : '▼'}</span>
+          </button>
+          <AnimatePresence>
+            {showRecall && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} style={{ overflow: 'hidden' }}>
+                <div style={{ background: 'rgba(251,191,36,0.03)', border: '1px solid rgba(251,191,36,0.12)', borderTop: 'none', borderRadius: '0 0 16px 16px', padding: '8px 0' }}>
+                  {recallLoading ? (
+                    <p style={{ color: 'rgba(255,255,255,0.3)', textAlign: 'center', padding: '28px', fontSize: '14px' }}>Loading patients...</p>
+                  ) : recallPatients.length === 0 ? (
+                    <p style={{ color: 'rgba(255,255,255,0.3)', textAlign: 'center', padding: '28px', fontSize: '14px' }}>No patients to recall — everyone visited recently.</p>
+                  ) : (
+                    <>
+                      <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: '11px', padding: '8px 20px 4px', letterSpacing: '0.5px' }}>
+                        {recallPatients.length} patient{recallPatients.length !== 1 ? 's' : ''} haven't visited in 30+ days. Tap to send a WhatsApp follow-up.
+                      </p>
+                      {recallPatients.map((patient, idx) => {
+                        const daysAgo = Math.floor((Date.now() - patient.visitDate.getTime()) / (1000 * 60 * 60 * 24));
+                        const lastDate = patient.visitDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+                        const msg = encodeURIComponent(`Namaskar ${patient.name}, it has been ${daysAgo} days since your last visit at ${hospitalName}. We hope you are well. Please book your follow-up if needed.`);
+                        return (
+                          <div key={patient.id} style={{ padding: '12px 20px', borderBottom: idx < recallPatients.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                            <div>
+                              <p style={{ color: 'white', fontSize: '14px', fontWeight: '600', margin: 0 }}>{patient.name}</p>
+                              <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '12px', margin: '2px 0 0 0' }}>
+                                Last visit: {lastDate} ({daysAgo} days ago) · {patient.department}
+                              </p>
+                            </div>
+                            <a href={`https://wa.me/${fmtPhone(patient.phone)}?text=${msg}`} target="_blank" rel="noopener noreferrer"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 14px', background: '#25D366', borderRadius: '8px', color: 'white', fontSize: '13px', fontWeight: '600', textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                              Send Recall
+                            </a>
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
         {/* Staff Management */}
         <div style={{ marginBottom: '16px' }}>
@@ -505,7 +639,7 @@ function AdminDashboard() {
                 <div style={{ background: 'rgba(99,102,241,0.04)', border: '1px solid rgba(99,102,241,0.15)', borderTop: 'none', borderRadius: '0 0 16px 16px', padding: '24px' }}>
                   <h3 style={{ color: '#818cf8', margin: '0 0 16px 0', fontSize: '15px', fontWeight: '700' }}>Add Admin Account</h3>
                   <form onSubmit={addStaff}>
-                    <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 600 ? '1fr' : '1fr 1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                       <input placeholder="Staff Name" value={staffName} onChange={e => setStaffName(e.target.value)} required style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', fontSize: '14px', outline: 'none' }} />
                       <input placeholder="Phone Number" value={staffPhone} onChange={e => setStaffPhone(e.target.value)} required style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', fontSize: '14px', outline: 'none' }} />
                       <input placeholder="Password" type="password" value={staffPassword} onChange={e => setStaffPassword(e.target.value)} required style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', fontSize: '14px', outline: 'none' }} />
@@ -540,38 +674,58 @@ function AdminDashboard() {
         {/* Hospital Settings */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.38 }}
           style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '24px', padding: '24px', backdropFilter: 'blur(20px)', marginBottom: '16px' }}>
-          <h3 style={{ color: 'rgba(255,255,255,0.7)', margin: '0 0 16px 0', fontSize: '15px', fontWeight: '700' }}>⚙️ Hospital Settings</h3>
-          <div>
+          <h3 style={{ color: 'rgba(255,255,255,0.7)', margin: '0 0 20px 0', fontSize: '15px', fontWeight: '700' }}>⚙️ Hospital Settings</h3>
+
+          {/* WhatsApp number */}
+          <div style={{ marginBottom: '20px' }}>
             <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '8px' }}>WhatsApp Number</p>
             {editingWhatsapp ? (
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <input
-                  autoFocus
-                  value={whatsappNumber}
-                  onChange={e => setWhatsappNumber(e.target.value)}
+                <input autoFocus value={whatsappNumber} onChange={e => setWhatsappNumber(e.target.value)}
                   placeholder="e.g. 919876543210 (with country code, no +)"
-                  onBlur={saveWhatsappNumber}
-                  onKeyDown={e => e.key === 'Enter' && saveWhatsappNumber()}
-                  style={{ flex: 1, minWidth: '200px', padding: '9px 12px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: 'white', fontSize: '13px', outline: 'none' }}
-                />
+                  onBlur={saveWhatsappNumber} onKeyDown={e => e.key === 'Enter' && saveWhatsappNumber()}
+                  style={{ flex: 1, minWidth: '200px', padding: '9px 12px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: 'white', fontSize: '13px', outline: 'none' }} />
                 <button onClick={saveWhatsappNumber} style={{ padding: '9px 16px', background: 'rgba(37,211,102,0.15)', border: '1px solid rgba(37,211,102,0.3)', borderRadius: '8px', color: '#25D366', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>Save</button>
                 <button onClick={() => setEditingWhatsapp(false)} style={{ padding: '9px 12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: '13px' }}>Cancel</button>
               </div>
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <p style={{ color: whatsappNumber ? 'white' : 'rgba(255,255,255,0.2)', fontSize: '14px', margin: 0, fontWeight: whatsappNumber ? '600' : '400' }}>
-                  {whatsappNumber || 'Not set — patients will not see the WhatsApp prompt'}
+                  {whatsappNumber || 'Not set'}
                 </p>
-                <button onClick={() => setEditingWhatsapp(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.3)', fontSize: '12px', padding: '0 2px' }} title="Edit">✏️</button>
+                <button onClick={() => setEditingWhatsapp(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.3)', fontSize: '12px' }} title="Edit">✏️</button>
+              </div>
+            )}
+            <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: '12px', marginTop: '6px' }}>Patients see a "Get WhatsApp updates" button after receiving their token.</p>
+          </div>
+
+          {/* F4 — Google Place ID */}
+          <div>
+            <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '8px' }}>Google Place ID</p>
+            {editingPlaceId ? (
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <input autoFocus value={googlePlaceId} onChange={e => setGooglePlaceId(e.target.value)}
+                  placeholder="e.g. ChIJN1t_tDeuEmsRUsoyG83frY4"
+                  onBlur={saveGooglePlaceId} onKeyDown={e => e.key === 'Enter' && saveGooglePlaceId()}
+                  style={{ flex: 1, minWidth: '200px', padding: '9px 12px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: 'white', fontSize: '13px', outline: 'none' }} />
+                <button onClick={saveGooglePlaceId} style={{ padding: '9px 16px', background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.3)', borderRadius: '8px', color: '#fbbf24', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>Save</button>
+                <button onClick={() => setEditingPlaceId(false)} style={{ padding: '9px 12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: '13px' }}>Cancel</button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <p style={{ color: googlePlaceId ? 'white' : 'rgba(255,255,255,0.2)', fontSize: '14px', margin: 0, fontWeight: googlePlaceId ? '600' : '400', wordBreak: 'break-all' }}>
+                  {googlePlaceId || 'Not set'}
+                </p>
+                <button onClick={() => setEditingPlaceId(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.3)', fontSize: '12px', flexShrink: 0 }} title="Edit">✏️</button>
               </div>
             )}
             <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: '12px', marginTop: '6px' }}>
-              Patients will see a "Get WhatsApp updates" button after receiving their token.
+              Find this in your Google Maps listing. Enables "Leave a Review" prompt on the Get Well Soon screen.
             </p>
           </div>
         </motion.div>
 
-        {/* QR Code + printQR button */}
+        {/* QR Code */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}
           style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '24px', padding: '28px', backdropFilter: 'blur(20px)', display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
           <div style={{ background: 'white', padding: '12px', borderRadius: '12px', display: 'inline-block' }}>
@@ -581,11 +735,7 @@ function AdminDashboard() {
             <h3 style={{ color: 'white', margin: '0 0 8px 0', fontSize: '16px', fontWeight: '700' }}>Patient Check-in QR Code</h3>
             <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '13px', margin: '0 0 4px 0' }}>Print this and place it at reception</p>
             <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: '12px', margin: '0 0 16px 0' }}>Patients scan to register — reception assigns department</p>
-            <button onClick={printQRCode} style={{ // printQR
-              padding: '8px 18px', background: 'rgba(255,255,255,0.07)',
-              border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px',
-              color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '13px', fontWeight: '600',
-            }}>🖨️ Print QR Code</button>
+            <button onClick={printQRCode} style={{ padding: '8px 18px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>🖨️ Print QR Code</button>
           </div>
         </motion.div>
 

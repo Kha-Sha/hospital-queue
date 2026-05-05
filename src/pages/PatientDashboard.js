@@ -64,6 +64,7 @@ function PatientDashboard() {
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [whatsappClicked, setWhatsappClicked] = useState(() => localStorage.getItem('qalm_wa_clicked_' + (auth.currentUser?.uid || '')) === 'true');
+  const [googlePlaceId, setGooglePlaceId] = useState('');
   const receiptShownRef = useRef(false);
   const wasBeingCalled = useRef(false);
 
@@ -100,6 +101,7 @@ function PatientDashboard() {
         setHospitalName(snap.data().hospitalName || '');
         setQueuePaused(snap.data().queuePaused || false);
         setWhatsappNumber(snap.data().whatsappNumber || '');
+        setGooglePlaceId(snap.data().googlePlaceId || '');
       }
     });
 
@@ -334,9 +336,48 @@ function PatientDashboard() {
           </p>
         )}
 
-        <p style={{ color: '#9ca3af', fontSize: '14px', lineHeight: '1.6', marginBottom: '40px' }}>
+        <p style={{ color: '#9ca3af', fontSize: '14px', lineHeight: '1.6', marginBottom: '28px' }}>
           {t.getWellSoonSubtitle}
         </p>
+
+        {googlePlaceId && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35 }}
+            style={{
+              background: '#fef9ec',
+              border: '1px solid #fde68a',
+              borderRadius: '16px',
+              padding: '18px 20px',
+              marginBottom: '24px',
+              textAlign: 'center',
+            }}
+          >
+            <p style={{ color: '#92400e', fontSize: '14px', fontWeight: '600', margin: '0 0 4px 0' }}>
+              Enjoying a shorter wait?
+            </p>
+            <p style={{ color: '#b45309', fontSize: '13px', margin: '0 0 14px 0', lineHeight: 1.5 }}>
+              Help others find us — takes 30 seconds.
+            </p>
+            <a
+              href={`https://search.google.com/local/writereview?placeid=${googlePlaceId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                padding: '10px 20px',
+                background: 'white', border: '1px solid #d1d5db',
+                borderRadius: '10px', color: '#374151',
+                fontSize: '14px', fontWeight: '600',
+                textDecoration: 'none',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+              }}
+            >
+              ⭐ Leave a Google Review
+            </a>
+          </motion.div>
+        )}
 
         <button
           onClick={handleLogout}
