@@ -227,12 +227,6 @@ function AdminDashboard() {
     finally { await secondaryApp.delete(); setAddingStaff(false); }
   };
 
-  const printQRCode = () => {
-    const win = window.open('', '_blank', 'width=600,height=700');
-    win.document.write(`<!DOCTYPE html><html><head><title>QR Code</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:40px;text-align:center}h1{font-size:22px;font-weight:700;margin-bottom:6px}p{color:#555;font-size:15px;margin:4px 0}.sub{font-size:12px;color:#aaa;margin-top:12px}img{margin:28px 0;border:1px solid #e5e7eb;padding:12px;border-radius:8px}</style></head><body><h1>${hospitalName}</h1><p>Scan to check in</p><img src="https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(qrUrl)}" width="260" height="260" onload="window.print()"/><p class="sub">${qrUrl}</p></body></html>`);
-    win.document.close();
-  };
-
   const loadRecallPatients = async () => {
     setRecallLoading(true);
     try {
