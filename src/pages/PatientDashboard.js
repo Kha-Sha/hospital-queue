@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db, getHospitalId } from '../firebase';
 import { useLanguage, LanguageSwitcher } from '../LanguageContext';
-import { signOut } from 'firebase/auth';
+import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, getDocs, collection, query, where, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, Hospital, CheckCircle, LogOut } from 'lucide-react';
@@ -65,6 +65,7 @@ function PatientDashboard() {
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [whatsappClicked, setWhatsappClicked] = useState(() => localStorage.getItem('qalm_wa_clicked_' + (auth.currentUser?.uid || '')) === 'true');
   const [googlePlaceId, setGooglePlaceId] = useState('');
+  const [authLoading, setAuthLoading] = useState(true);
   const receiptShownRef = useRef(false);
   const wasBeingCalled = useRef(false);
 
@@ -80,56 +81,68 @@ function PatientDashboard() {
   }, []);
 
   useEffect(() => {
-    if (!auth.currentUser) { navigate('/patient-login'); return; }
-    const fetchName = async () => {
-      const snap = await getDoc(doc(db, 'patients', auth.currentUser.uid));
-      if (snap.exists()) {
-        const fullName = snap.data().name || '';
-        setPatientName(fullName.split(' ')[0]);
-      }
-    };
-    fetchName();
+    let unsubPending, unsubSettings, unsubQueue;
 
-    const pendingRef = doc(db, 'hospitals', getHospitalId(), 'pending', auth.currentUser.uid);
-    const unsubPending = onSnapshot(pendingRef, (snap) => {
-      setIsPending(snap.exists() && snap.data().status === 'pending');
-      setLoading(false);
-    });
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      if (!user) { navigate('/patient-login'); return; }
 
-    const unsubSettings = onSnapshot(doc(db, 'hospitals', getHospitalId(), 'settings', 'hospital'), (snap) => {
-      if (snap.exists()) {
-        setHospitalName(snap.data().hospitalName || '');
-        setQueuePaused(snap.data().queuePaused || false);
-        setWhatsappNumber(snap.data().whatsappNumber || '');
-        setGooglePlaceId(snap.data().googlePlaceId || '');
-      }
-    });
+      setAuthLoading(false);
 
-    const q = query(collection(db, 'hospitals', getHospitalId(), 'queue'), where('userId', '==', auth.currentUser.uid), where('status', '==', 'waiting'));
-    const unsubQueue = onSnapshot(q, (snapshot) => {
-      if (!snapshot.empty) {
-        const data = snapshot.docs[0].data();
-        const token = data.tokenNumber;
-        setTokenNumber(token);
-        setPatientDepartment(data.department || '');
-        setCheckedIn(true);
-        if (!receiptShownRef.current) {
-          receiptShownRef.current = true;
-          setCheckInTimeLocal(new Date());
-          setShowReceipt(true);
+      const fetchName = async () => {
+        const snap = await getDoc(doc(db, 'patients', user.uid));
+        if (snap.exists()) {
+          const fullName = snap.data().name || '';
+          setPatientName(fullName.split(' ')[0]);
         }
-      } else {
-        if (wasBeingCalled.current) {
-          setPatientDepartment('');
+      };
+      fetchName();
+
+      const pendingRef = doc(db, 'hospitals', getHospitalId(), 'pending', user.uid);
+      unsubPending = onSnapshot(pendingRef, (snap) => {
+        setIsPending(snap.exists() && snap.data().status === 'pending');
+        setLoading(false);
+      });
+
+      unsubSettings = onSnapshot(doc(db, 'hospitals', getHospitalId(), 'settings', 'hospital'), (snap) => {
+        if (snap.exists()) {
+          setHospitalName(snap.data().hospitalName || '');
+          setQueuePaused(snap.data().queuePaused || false);
+          setWhatsappNumber(snap.data().whatsappNumber || '');
+          setGooglePlaceId(snap.data().googlePlaceId || '');
+        }
+      });
+
+      const q = query(collection(db, 'hospitals', getHospitalId(), 'queue'), where('userId', '==', user.uid), where('status', '==', 'waiting'));
+      unsubQueue = onSnapshot(q, (snapshot) => {
+        if (!snapshot.empty) {
+          const data = snapshot.docs[0].data();
+          const token = data.tokenNumber;
+          setTokenNumber(token);
+          setPatientDepartment(data.department || '');
+          setCheckedIn(true);
+          if (!receiptShownRef.current) {
+            receiptShownRef.current = true;
+            setCheckInTimeLocal(new Date());
+            setShowReceipt(true);
+          }
         } else {
-          setCheckedIn(false);
-          setTokenNumber(null);
-          setPatientDepartment('');
+          if (wasBeingCalled.current) {
+            setPatientDepartment('');
+          } else {
+            setCheckedIn(false);
+            setTokenNumber(null);
+            setPatientDepartment('');
+          }
         }
-      }
+      });
     });
 
-    return () => { unsubSettings(); unsubQueue(); unsubPending(); };
+    return () => {
+      unsubAuth();
+      unsubSettings?.();
+      unsubQueue?.();
+      unsubPending?.();
+    };
   }, [navigate]);
 
   const handleLogout = async () => {
@@ -213,6 +226,13 @@ function PatientDashboard() {
     };
     fetchDoctor();
   }, [patientDepartment]);
+
+  // ── Auth loading ──
+  if (authLoading) return (
+    <div style={{ minHeight: '100vh', background: 'radial-gradient(ellipse at 20% 50%, #0f1f3d 0%, #060d1a 60%, #0a0a0f 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '15px', fontFamily: "'Segoe UI', sans-serif" }}>Loading...</p>
+    </div>
+  );
 
   // ── Loading ──
   if (loading) return (

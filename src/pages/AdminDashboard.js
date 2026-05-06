@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db, firebaseConfig, getHospitalId } from '../firebase';
-import { signOut, createUserWithEmailAndPassword, getAuth } from 'firebase/auth';
+import { signOut, createUserWithEmailAndPassword, getAuth, onAuthStateChanged } from 'firebase/auth';
 import { initializeApp } from 'firebase/app';
 import { collection, query, where, onSnapshot, doc, setDoc, updateDoc, getDocs, getDoc, serverTimestamp, deleteDoc, runTransaction } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -57,61 +57,76 @@ function AdminDashboard() {
   // F4 – Google Place ID
   const [googlePlaceId, setGooglePlaceId] = useState('');
   const [editingPlaceId, setEditingPlaceId] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
 
   const qrUrl = `${BASE_URL}/patient-register?hospital=${auth.currentUser?.uid || ''}`;
 
   useEffect(() => {
-    if (!auth.currentUser) { navigate('/admin-login'); return; }
-    if (!auth.currentUser.email?.endsWith('@hospital-admin.com')) { navigate('/admin-login'); return; }
-    localStorage.setItem('qalm_hospital_id', auth.currentUser.uid);
+    let unsubSettings, unsubPending, unsubWaiting, unsubCompleted, unsubNoshow, unsubAdmins;
 
-    const checkAndResetQueue = async () => {
-      const settingsRef = doc(db, 'hospitals', getHospitalId(), 'settings', 'hospital');
-      const settingsSnap = await getDoc(settingsRef);
-      if (!settingsSnap.exists() || !settingsSnap.data().hospitalName) { navigate('/admin-setup'); return; }
-      const today = new Date().toDateString();
-      const lastReset = settingsSnap.data().lastReset;
-      if (lastReset !== today) {
-        const snap = await getDocs(query(collection(db, 'hospitals', getHospitalId(), 'queue'), where('status', '==', 'waiting')));
-        await Promise.all(snap.docs.map(d => updateDoc(doc(db, 'hospitals', getHospitalId(), 'queue', d.id), { status: 'cancelled' })));
-        await setDoc(settingsRef, { currentToken: 0, lastToken: 0, lastReset: today }, { merge: true });
-        const assignedSnap = await getDocs(query(collection(db, 'hospitals', getHospitalId(), 'pending'), where('status', '==', 'assigned')));
-        await Promise.all(assignedSnap.docs.map(d => deleteDoc(doc(db, 'hospitals', getHospitalId(), 'pending', d.id))));
-        const pendingSnap = await getDocs(query(collection(db, 'hospitals', getHospitalId(), 'pending'), where('status', '==', 'pending')));
-        await Promise.all(pendingSnap.docs.map(d => deleteDoc(doc(db, 'hospitals', getHospitalId(), 'pending', d.id))));
-      }
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      if (!user) { navigate('/admin-login'); return; }
+      if (!user.email?.endsWith('@hospital-admin.com')) { navigate('/admin-login'); return; }
+      localStorage.setItem('qalm_hospital_id', user.uid);
+
+      const checkAndResetQueue = async () => {
+        const settingsRef = doc(db, 'hospitals', getHospitalId(), 'settings', 'hospital');
+        const settingsSnap = await getDoc(settingsRef);
+        if (!settingsSnap.exists() || !settingsSnap.data().hospitalName) { navigate('/admin-setup'); return; }
+        const today = new Date().toDateString();
+        const lastReset = settingsSnap.data().lastReset;
+        if (lastReset !== today) {
+          const snap = await getDocs(query(collection(db, 'hospitals', getHospitalId(), 'queue'), where('status', '==', 'waiting')));
+          await Promise.all(snap.docs.map(d => updateDoc(doc(db, 'hospitals', getHospitalId(), 'queue', d.id), { status: 'cancelled' })));
+          await setDoc(settingsRef, { currentToken: 0, lastToken: 0, lastReset: today }, { merge: true });
+          const assignedSnap = await getDocs(query(collection(db, 'hospitals', getHospitalId(), 'pending'), where('status', '==', 'assigned')));
+          await Promise.all(assignedSnap.docs.map(d => deleteDoc(doc(db, 'hospitals', getHospitalId(), 'pending', d.id))));
+          const pendingSnap = await getDocs(query(collection(db, 'hospitals', getHospitalId(), 'pending'), where('status', '==', 'pending')));
+          await Promise.all(pendingSnap.docs.map(d => deleteDoc(doc(db, 'hospitals', getHospitalId(), 'pending', d.id))));
+        }
+      };
+      checkAndResetQueue();
+
+      unsubSettings = onSnapshot(doc(db, 'hospitals', getHospitalId(), 'settings', 'hospital'), (snap) => {
+        if (snap.exists()) {
+          setCurrentToken(snap.data().currentToken || 0);
+          setHospitalName(snap.data().hospitalName || 'Your Hospital');
+          setQueuePaused(snap.data().queuePaused || false);
+          setWhatsappNumber(snap.data().whatsappNumber || '');
+          setGooglePlaceId(snap.data().googlePlaceId || '');
+          if (snap.data().activeDepartments?.length) setActiveDepartments(snap.data().activeDepartments);
+        }
+      });
+
+      unsubPending = onSnapshot(query(collection(db, 'hospitals', getHospitalId(), 'pending'), where('status', '==', 'pending')), (snap) => {
+        setPendingPatients(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
+
+      unsubWaiting = onSnapshot(query(collection(db, 'hospitals', getHospitalId(), 'queue'), where('status', '==', 'waiting')), (snap) => {
+        const patients = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        patients.sort((a, b) => a.tokenNumber - b.tokenNumber);
+        setQueue(patients);
+        setWaitingCount(snap.size);
+      });
+
+      unsubCompleted = onSnapshot(query(collection(db, 'hospitals', getHospitalId(), 'queue'), where('status', '==', 'completed')), (snap) => setCompletedCount(snap.size));
+      unsubNoshow = onSnapshot(query(collection(db, 'hospitals', getHospitalId(), 'queue'), where('status', '==', 'noshow')), (snap) => setNoshowCount(snap.size));
+      unsubAdmins = onSnapshot(collection(db, 'hospitals', getHospitalId(), 'admins'), (snap) => {
+        setAdminsList(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
+
+      setAuthLoading(false);
+    });
+
+    return () => {
+      unsubAuth();
+      unsubSettings?.();
+      unsubPending?.();
+      unsubWaiting?.();
+      unsubCompleted?.();
+      unsubNoshow?.();
+      unsubAdmins?.();
     };
-    checkAndResetQueue();
-
-    const unsubSettings = onSnapshot(doc(db, 'hospitals', getHospitalId(), 'settings', 'hospital'), (snap) => {
-      if (snap.exists()) {
-        setCurrentToken(snap.data().currentToken || 0);
-        setHospitalName(snap.data().hospitalName || 'Your Hospital');
-        setQueuePaused(snap.data().queuePaused || false);
-        setWhatsappNumber(snap.data().whatsappNumber || '');
-        setGooglePlaceId(snap.data().googlePlaceId || '');
-        if (snap.data().activeDepartments?.length) setActiveDepartments(snap.data().activeDepartments);
-      }
-    });
-
-    const unsubPending = onSnapshot(query(collection(db, 'hospitals', getHospitalId(), 'pending'), where('status', '==', 'pending')), (snap) => {
-      setPendingPatients(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-
-    const unsubWaiting = onSnapshot(query(collection(db, 'hospitals', getHospitalId(), 'queue'), where('status', '==', 'waiting')), (snap) => {
-      const patients = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      patients.sort((a, b) => a.tokenNumber - b.tokenNumber);
-      setQueue(patients);
-      setWaitingCount(snap.size);
-    });
-
-    const unsubCompleted = onSnapshot(query(collection(db, 'hospitals', getHospitalId(), 'queue'), where('status', '==', 'completed')), (snap) => setCompletedCount(snap.size));
-    const unsubNoshow = onSnapshot(query(collection(db, 'hospitals', getHospitalId(), 'queue'), where('status', '==', 'noshow')), (snap) => setNoshowCount(snap.size));
-    const unsubAdmins = onSnapshot(collection(db, 'hospitals', getHospitalId(), 'admins'), (snap) => {
-      setAdminsList(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-
-    return () => { unsubSettings(); unsubPending(); unsubWaiting(); unsubCompleted(); unsubNoshow(); unsubAdmins(); };
   }, [navigate]);
 
   useEffect(() => {
@@ -268,6 +283,12 @@ function AdminDashboard() {
 
   const isMobile = window.innerWidth < 600;
 
+  if (authLoading) return (
+    <div style={{ minHeight: '100vh', background: 'radial-gradient(ellipse at 20% 50%, #0f1f3d 0%, #060d1a 60%, #0a0a0f 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '15px', fontFamily: "'Segoe UI', sans-serif" }}>Loading...</p>
+    </div>
+  );
+
   return (
     <div style={{
       minHeight: '100vh',
@@ -350,7 +371,10 @@ function AdminDashboard() {
           {showAnalytics && (
             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.3 }} style={{ overflow: 'hidden', marginBottom: '16px' }}>
               <div style={{ background: 'rgba(99,102,241,0.04)', border: '1px solid rgba(99,102,241,0.12)', borderRadius: '24px', padding: '24px', backdropFilter: 'blur(20px)' }}>
-                <h3 style={{ color: '#818cf8', margin: '0 0 16px 0', fontSize: '15px', fontWeight: '700' }}>📊 Today's Analytics</h3>
+                <div style={{ marginBottom: '16px' }}>
+                  <h3 style={{ color: '#818cf8', margin: '0 0 4px 0', fontSize: '15px', fontWeight: '700' }}>📊 Queue Analytics</h3>
+                  <p style={{ color: 'rgba(129,140,248,0.45)', fontSize: '12px', margin: 0 }}>Since last reset</p>
+                </div>
                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(5, 1fr)', gap: '10px' }}>
                   {[
                     { label: 'Total Patients', value: analyticsTotal },
@@ -735,7 +759,7 @@ function AdminDashboard() {
             <h3 style={{ color: 'white', margin: '0 0 8px 0', fontSize: '16px', fontWeight: '700' }}>Patient Check-in QR Code</h3>
             <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '13px', margin: '0 0 4px 0' }}>Print this and place it at reception</p>
             <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: '12px', margin: '0 0 16px 0' }}>Patients scan to register — reception assigns department</p>
-            <button onClick={printQRCode} style={{ padding: '8px 18px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>🖨️ Print QR Code</button>
+            <button onClick={() => window.open(`/qr-card?hospital=${getHospitalId()}&name=${encodeURIComponent(hospitalName)}`, '_blank')} style={{ padding: '8px 18px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>🖨️ Print QR Code</button>
           </div>
         </motion.div>
 

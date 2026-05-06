@@ -9,6 +9,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import AdminSetup from './pages/AdminSetup';
 import DoctorLogin from './pages/DoctorLogin';
 import DoctorDashboard from './pages/DoctorDashboard';
+import QRCard from './pages/QRCard';
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
         <Route path="/admin-setup" element={<AdminSetup />} />
         <Route path="/doctor-login" element={<DoctorLogin />} />
         <Route path="/doctor-dashboard" element={<DoctorDashboard />} />
+        <Route path="/qr-card" element={<QRCard />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
