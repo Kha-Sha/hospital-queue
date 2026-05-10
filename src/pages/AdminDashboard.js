@@ -64,6 +64,7 @@ function AdminDashboard() {
   const [allNoshow, setAllNoshow] = useState([]);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [doctors, setDoctors] = useState([]);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 600);
 
   const qrUrl = `${BASE_URL}/patient-register?hospital=${auth.currentUser?.uid || ''}`;
 
@@ -167,6 +168,14 @@ function AdminDashboard() {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
+  }, []);
+
+  useEffect(() => {
+    const observer = new ResizeObserver(() => {
+      setIsMobile(window.innerWidth < 600);
+    });
+    observer.observe(document.body);
+    return () => observer.disconnect();
   }, []);
 
   const assignDepartment = async (patient, department) => {
@@ -329,9 +338,6 @@ function AdminDashboard() {
   const todayNoshowRate = todayTotal > 0 ? `${(todayNoshow / todayTotal * 100).toFixed(0)}%` : '—';
   const todayDate = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
 
-  const analyticsTotal = completedCount + waitingCount + noshowCount;
-  const completionRate = analyticsTotal > 0 ? `${(completedCount / analyticsTotal * 100).toFixed(0)}%` : '—';
-  const noshowRate = analyticsTotal > 0 ? `${(noshowCount / analyticsTotal * 100).toFixed(0)}%` : '—';
   const hoursElapsed = Math.max(0.1, (Date.now() - new Date().setHours(0, 0, 0, 0)) / 3600000);
   const avgPerHour = (todayCompleted / hoursElapsed).toFixed(1);
   const deptCounts = {};
@@ -354,8 +360,6 @@ function AdminDashboard() {
 
   // F1: patients at position 4+ (index >= 3) in the sorted queue
   const reminderPatients = queue.filter((_, i) => i >= 3);
-
-  const isMobile = window.innerWidth < 600;
 
   if (authLoading) return (
     <div style={{ minHeight: '100vh', background: 'radial-gradient(ellipse at 20% 50%, #0f1f3d 0%, #060d1a 60%, #0a0a0f 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

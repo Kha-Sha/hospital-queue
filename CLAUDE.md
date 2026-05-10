@@ -139,7 +139,7 @@ Not a queue management system — a patient experience tool that protects clinic
 - Hot prospect signal: clinic that recently got a bad Google review about waiting times
 - Opening line: "Has your clinic had patients complain about waiting times recently?"
 - Demo: show the demo modal on phone, let them click
-- Offer: 30 days free, ₹2000 setup fee via UPI on the spot, ₹999/month after
+- Offer: 30 days free, ₹2000 setup fee via UPI on the spot, ₹1,999/month after (Pro tier — every first sale is Pro)
 - Leave behind: printed A5 card with QR code and one line of copy
 
 ## V2 Roadmap
