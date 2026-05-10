@@ -140,6 +140,10 @@ function Home() {
 
   const submitLead = async (e) => {
     e.preventDefault();
+    if (leadForm.phone.replace(/\D/g, '').length !== 10) {
+      setLeadError('Please enter a valid 10-digit phone number');
+      return;
+    }
     setLeadSubmitting(true);
     setLeadError('');
     try {

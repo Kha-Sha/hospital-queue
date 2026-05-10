@@ -2,60 +2,72 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Public lead submissions from landing page — write-only, no auth required
-    match /leads/{docId} {
-      allow create: if true;
-      allow read, update, delete: if false;
+    function isAdmin(hospitalId) {
+      return request.auth != null &&
+             request.auth.uid == hospitalId &&
+             request.auth.token.email.matches('.*@hospital-admin\\.com');
     }
 
-    // Global patient profiles — read/write own record only
+    function isDoctor() {
+      return request.auth != null &&
+             request.auth.token.email.matches('.*@hospital-doctor\\.com');
+    }
+
+    function isPatient() {
+      return request.auth != null &&
+             request.auth.token.email.matches('.*@hospital\\.com');
+    }
+
     match /patients/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if isAdmin(resource.data.hospitalId);
     }
 
-    // Global doctor lookup index — used by DoctorLogin to resolve hospitalId
-    match /doctors/{docId} {
+    match /leads/{leadId} {
+      allow create: if true;
+      allow read, write: if false;
+    }
+
+    match /hospitals/{hospitalId}/{document=**} {
+      allow read, write: if isAdmin(hospitalId);
+    }
+
+    match /hospitals/{hospitalId}/queue/{docId} {
+      allow read: if request.auth != null &&
+                     (request.auth.uid == resource.data.userId || isAdmin(hospitalId));
+      allow write: if isAdmin(hospitalId);
+    }
+
+    match /hospitals/{hospitalId}/pending/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if isAdmin(hospitalId) ||
+                      (request.auth != null && request.auth.uid == userId);
+    }
+
+    match /hospitals/{hospitalId}/settings/{docId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null;
+      allow write: if isAdmin(hospitalId);
     }
 
-    // Per-hospital namespace
-    match /hospitals/{hospitalId} {
+    match /hospitals/{hospitalId}/departments/{docId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin(hospitalId) || isDoctor();
+    }
 
-      // Hospital settings — any authenticated user can read; only admin (uid == hospitalId) can write
-      match /settings/{docId} {
-        allow read: if request.auth != null;
-        allow write: if request.auth != null && request.auth.uid == hospitalId;
-      }
+    match /doctors/{doctorId} {
+      allow read: if request.auth != null && request.auth.uid == doctorId;
+      allow write: if isAdmin(resource.data.hospitalId) ||
+                      isAdmin(request.resource.data.hospitalId);
+    }
 
-      // Pending arrivals — patients write their own; any authenticated user can read
-      match /pending/{userId} {
-        allow read: if request.auth != null;
-        allow create: if request.auth != null && request.auth.uid == userId;
-        allow update, delete: if request.auth != null;
-      }
+    match /hospitals/{hospitalId}/doctors/{doctorId} {
+      allow read: if isAdmin(hospitalId) ||
+                     (isDoctor() && request.auth.uid == doctorId);
+      allow write: if isAdmin(hospitalId);
+    }
 
-      // Queue — any authenticated user can read/write (admin assigns, doctor completes, patient cancels)
-      match /queue/{docId} {
-        allow read, write: if request.auth != null;
-      }
-
-      // Departments — any authenticated user can read; admin/doctor can write
-      match /departments/{deptName} {
-        allow read, write: if request.auth != null;
-      }
-
-      // Doctor profiles scoped to this hospital
-      match /doctors/{docId} {
-        allow read: if request.auth != null;
-        allow write: if request.auth != null;
-      }
-
-      // Admin accounts scoped to this hospital
-      match /admins/{docId} {
-        allow read: if request.auth != null;
-        allow write: if request.auth != null && request.auth.uid == hospitalId;
-      }
+    match /hospitals/{hospitalId}/admins/{adminId} {
+      allow read, write: if isAdmin(hospitalId);
     }
   }
 }

@@ -17,6 +17,7 @@ function DoctorDashboard() {
   const [calling, setCalling] = useState(false);
   const [doctorName, setDoctorName] = useState('');
   const [notConfigured, setNotConfigured] = useState(false);
+  const [isDeactivated, setIsDeactivated] = useState(false);
 
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, async (user) => {
@@ -28,6 +29,10 @@ function DoctorDashboard() {
       try {
         const snap = await getDoc(doc(db, 'hospitals', getHospitalId(), 'doctors', user.uid));
         if (snap.exists()) {
+          if (snap.data().active === false) {
+            setIsDeactivated(true);
+            return;
+          }
           setDoctorName(snap.data().name || 'Doctor');
           setDepartment(snap.data().department || 'General OPD');
         } else {
@@ -84,6 +89,17 @@ function DoctorDashboard() {
   if (authLoading) return (
     <div style={{ minHeight: '100vh', background: 'radial-gradient(ellipse at 20% 50%, #0a1f14 0%, #060d1a 60%, #0a0a0f 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '15px', fontFamily: "'Segoe UI', sans-serif" }}>Loading...</p>
+    </div>
+  );
+
+  if (isDeactivated) return (
+    <div style={{ minHeight: '100vh', background: 'radial-gradient(ellipse at 20% 50%, #0a1f14 0%, #060d1a 60%, #0a0a0f 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+      <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(251,191,36,0.2)', borderRadius: '24px', padding: '40px', backdropFilter: 'blur(40px)', textAlign: 'center', maxWidth: '380px' }}>
+        <div style={{ fontSize: '40px', marginBottom: '16px' }}>⚠</div>
+        <h3 style={{ color: 'white', fontSize: '18px', fontWeight: '600', marginBottom: '12px' }}>Account deactivated</h3>
+        <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '14px', lineHeight: '1.6', marginBottom: '24px' }}>Your account has been deactivated. Please contact your clinic admin.</p>
+        <button onClick={handleLogout} style={{ padding: '10px 24px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: '14px' }}>Logout</button>
+      </div>
     </div>
   );
 
@@ -170,4 +186,4 @@ function DoctorDashboard() {
   );
 }
 
-export default DoctorDashboard;
+export default React.memo(DoctorDashboard);

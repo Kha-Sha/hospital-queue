@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { QRCodeCanvas } from 'qrcode.react';
 
@@ -6,6 +6,11 @@ const BASE_URL = 'https://hospital-queue-kappa.vercel.app';
 
 function QRCard() {
   const [params] = useSearchParams();
+
+  useEffect(() => {
+    document.title = 'Qalm — Patient Check-in';
+    return () => { document.title = 'Qalm'; };
+  }, []);
   const hospitalId = params.get('hospital') || '';
   const hospitalName = params.get('name') || 'Your Clinic';
   const qrUrl = `${BASE_URL}/patient-register?hospital=${hospitalId}`;

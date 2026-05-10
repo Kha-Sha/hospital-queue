@@ -58,11 +58,17 @@ function AdminDashboard() {
   const [googlePlaceId, setGooglePlaceId] = useState('');
   const [editingPlaceId, setEditingPlaceId] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
+  const [calledAt, setCalledAt] = useState(null);
+  const [now, setNow] = useState(Date.now());
+  const [allCompleted, setAllCompleted] = useState([]);
+  const [allNoshow, setAllNoshow] = useState([]);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [doctors, setDoctors] = useState([]);
 
   const qrUrl = `${BASE_URL}/patient-register?hospital=${auth.currentUser?.uid || ''}`;
 
   useEffect(() => {
-    let unsubSettings, unsubPending, unsubWaiting, unsubCompleted, unsubNoshow, unsubAdmins;
+    let unsubSettings, unsubPending, unsubWaiting, unsubCompleted, unsubNoshow, unsubAdmins, unsubDoctors;
 
     const unsubAuth = onAuthStateChanged(auth, (user) => {
       if (!user) { navigate('/admin-login'); return; }
@@ -109,10 +115,19 @@ function AdminDashboard() {
         setWaitingCount(snap.size);
       });
 
-      unsubCompleted = onSnapshot(query(collection(db, 'hospitals', getHospitalId(), 'queue'), where('status', '==', 'completed')), (snap) => setCompletedCount(snap.size));
-      unsubNoshow = onSnapshot(query(collection(db, 'hospitals', getHospitalId(), 'queue'), where('status', '==', 'noshow')), (snap) => setNoshowCount(snap.size));
+      unsubCompleted = onSnapshot(query(collection(db, 'hospitals', getHospitalId(), 'queue'), where('status', '==', 'completed')), (snap) => {
+        setCompletedCount(snap.size);
+        setAllCompleted(snap.docs.map(d => d.data()));
+      });
+      unsubNoshow = onSnapshot(query(collection(db, 'hospitals', getHospitalId(), 'queue'), where('status', '==', 'noshow')), (snap) => {
+        setNoshowCount(snap.size);
+        setAllNoshow(snap.docs.map(d => d.data()));
+      });
       unsubAdmins = onSnapshot(collection(db, 'hospitals', getHospitalId(), 'admins'), (snap) => {
         setAdminsList(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
+      unsubDoctors = onSnapshot(collection(db, 'hospitals', getHospitalId(), 'doctors'), (snap) => {
+        setDoctors(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
 
       setAuthLoading(false);
@@ -126,12 +141,33 @@ function AdminDashboard() {
       unsubCompleted?.();
       unsubNoshow?.();
       unsubAdmins?.();
+      unsubDoctors?.();
     };
   }, [navigate]);
 
   useEffect(() => {
     if (selectedDept !== 'All' && !queue.some(p => p.department === selectedDept)) setSelectedDept('All');
   }, [queue, selectedDept]);
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (currentToken > 0) setCalledAt(Date.now());
+  }, [currentToken]);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   const assignDepartment = async (patient, department) => {
     try {
@@ -213,6 +249,36 @@ function AdminDashboard() {
     await updateDoc(doc(db, 'hospitals', getHospitalId(), 'queue', patient.id), { tokenNumber: lowestToken - 0.5 });
   };
 
+  const deactivateDoctor = async (doctorId) => {
+    if (!window.confirm('Deactivate this doctor account? They will lose access until reactivated.')) return;
+    try {
+      await Promise.all([
+        updateDoc(doc(db, 'hospitals', getHospitalId(), 'doctors', doctorId), { active: false }),
+        updateDoc(doc(db, 'doctors', doctorId), { active: false }),
+      ]);
+    } catch (err) { console.error(err); }
+  };
+
+  const exportData = async () => {
+    try {
+      const snap = await getDocs(query(collection(db, 'hospitals', getHospitalId(), 'queue'), where('status', '==', 'completed')));
+      const headers = 'Name,Phone,Department,Token Number,Check-in Time,Status';
+      const rows = snap.docs.map(d => {
+        const p = d.data();
+        const checkIn = p.checkInTime?.seconds ? new Date(p.checkInTime.seconds * 1000).toLocaleString('en-IN') : '';
+        return [p.name || '', p.phone || '', p.department || '', p.tokenNumber || '', checkIn, 'completed'].join(',');
+      });
+      const csv = [headers, ...rows].join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `qalm-patients-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) { console.error(err); }
+  };
+
   const addStaff = async (e) => {
     e.preventDefault(); setStaffError(''); setAddingStaff(true);
     const secondaryApp = initializeApp(firebaseConfig, `secondary-staff-${Date.now()}`);
@@ -249,11 +315,25 @@ function AdminDashboard() {
     setRecallLoading(false);
   };
 
+  const todayStr = new Date().toDateString();
+  const tsToDate = (ts) => {
+    if (!ts) return null;
+    if (typeof ts.toDate === 'function') return ts.toDate();
+    if (ts.seconds) return new Date(ts.seconds * 1000);
+    return null;
+  };
+  const todayCompleted = allCompleted.filter(p => tsToDate(p.checkInTime)?.toDateString() === todayStr).length;
+  const todayNoshow = allNoshow.filter(p => tsToDate(p.checkInTime)?.toDateString() === todayStr).length;
+  const todayTotal = todayCompleted + waitingCount + todayNoshow;
+  const todayCompletionRate = todayTotal > 0 ? `${(todayCompleted / todayTotal * 100).toFixed(0)}%` : '—';
+  const todayNoshowRate = todayTotal > 0 ? `${(todayNoshow / todayTotal * 100).toFixed(0)}%` : '—';
+  const todayDate = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+
   const analyticsTotal = completedCount + waitingCount + noshowCount;
   const completionRate = analyticsTotal > 0 ? `${(completedCount / analyticsTotal * 100).toFixed(0)}%` : '—';
   const noshowRate = analyticsTotal > 0 ? `${(noshowCount / analyticsTotal * 100).toFixed(0)}%` : '—';
   const hoursElapsed = Math.max(0.1, (Date.now() - new Date().setHours(0, 0, 0, 0)) / 3600000);
-  const avgPerHour = (completedCount / hoursElapsed).toFixed(1);
+  const avgPerHour = (todayCompleted / hoursElapsed).toFixed(1);
   const deptCounts = {};
   queue.forEach(p => { deptCounts[p.department] = (deptCounts[p.department] || 0) + 1; });
   const busiestDept = Object.entries(deptCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '—';
@@ -330,6 +410,13 @@ function AdminDashboard() {
           </div>
         </motion.div>
 
+        {/* Offline banner */}
+        {!isOnline && (
+          <div style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)', borderRadius: '12px', padding: '10px 16px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ color: '#fbbf24', fontSize: '13px', fontWeight: '600' }}>Offline — changes will sync when connection returns</span>
+          </div>
+        )}
+
         {/* Pause banner */}
         <AnimatePresence>
           {queuePaused && (
@@ -365,15 +452,20 @@ function AdminDashboard() {
           {showAnalytics && (
             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.3 }} style={{ overflow: 'hidden', marginBottom: '16px' }}>
               <div style={{ background: 'rgba(99,102,241,0.04)', border: '1px solid rgba(99,102,241,0.12)', borderRadius: '24px', padding: '24px', backdropFilter: 'blur(20px)' }}>
-                <div style={{ marginBottom: '16px' }}>
-                  <h3 style={{ color: '#818cf8', margin: '0 0 4px 0', fontSize: '15px', fontWeight: '700' }}>📊 Queue Analytics</h3>
-                  <p style={{ color: 'rgba(129,140,248,0.45)', fontSize: '12px', margin: 0 }}>Since last reset</p>
+                <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
+                  <div>
+                    <h3 style={{ color: '#818cf8', margin: '0 0 4px 0', fontSize: '15px', fontWeight: '700' }}>📊 Queue Analytics</h3>
+                    <p style={{ color: 'rgba(129,140,248,0.45)', fontSize: '12px', margin: 0 }}>Today — {todayDate}</p>
+                  </div>
+                  <button onClick={exportData} style={{ padding: '7px 14px', background: 'rgba(129,140,248,0.1)', border: '1px solid rgba(129,140,248,0.25)', borderRadius: '8px', color: '#818cf8', cursor: 'pointer', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                    Export CSV
+                  </button>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(5, 1fr)', gap: '10px' }}>
                   {[
-                    { label: 'Total Patients', value: analyticsTotal },
-                    { label: 'Completion Rate', value: completionRate },
-                    { label: 'No-show Rate', value: noshowRate },
+                    { label: 'Today\'s Patients', value: todayTotal },
+                    { label: 'Completion Rate', value: todayCompletionRate },
+                    { label: 'No-show Rate', value: todayNoshowRate },
                     { label: 'Avg / Hour', value: avgPerHour },
                     { label: 'Busiest Dept', value: busiestDept },
                   ].map((s, i) => (
@@ -474,8 +566,13 @@ function AdminDashboard() {
                       {patient.tokenNumber}
                     </div>
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                         <p style={{ margin: 0, fontWeight: '600', color: 'white', fontSize: '15px' }}>{patient.name || 'Patient'}</p>
+                        {isCalled && calledAt && (now - calledAt) > 3 * 60 * 1000 && (
+                          <span style={{ background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.35)', borderRadius: '20px', padding: '2px 8px', fontSize: '11px', color: '#fbbf24', fontWeight: '700', whiteSpace: 'nowrap' }}>
+                            3+ min
+                          </span>
+                        )}
                         {searchQuery && (
                           <span style={{ background: 'rgba(37,99,235,0.25)', border: '1px solid rgba(37,99,235,0.45)', borderRadius: '20px', padding: '2px 10px', fontSize: '12px', color: '#93c5fd', fontWeight: '700', whiteSpace: 'nowrap' }}>
                             Token {patient.tokenNumber}
@@ -591,6 +688,28 @@ function AdminDashboard() {
                   {addingDoctor ? 'Creating...' : 'Create Doctor Account'}
                 </button>
               </form>
+              {doctors.length > 0 && (
+                <div style={{ marginTop: '20px' }}>
+                  <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '10px' }}>Doctor Accounts ({doctors.length})</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {doctors.map(doctor => (
+                      <div key={doctor.id} style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${doctor.active === false ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.07)'}`, borderRadius: '10px', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                        <div>
+                          <p style={{ color: doctor.active === false ? 'rgba(255,255,255,0.3)' : 'white', fontSize: '14px', fontWeight: '600', margin: 0 }}>{doctor.name}</p>
+                          <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '12px', margin: '2px 0 0 0' }}>{doctor.department} · {doctor.phone}</p>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          {doctor.active === false ? (
+                            <span style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '6px', padding: '3px 10px', color: '#f87171', fontSize: '12px', fontWeight: '600' }}>Deactivated</span>
+                          ) : (
+                            <button onClick={() => deactivateDoctor(doctor.id)} style={{ padding: '5px 12px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '6px', color: '#f87171', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>Deactivate</button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
@@ -762,4 +881,4 @@ function AdminDashboard() {
   );
 }
 
-export default AdminDashboard;
+export default React.memo(AdminDashboard);

@@ -873,4 +873,4 @@ function PatientDashboard() {
   );
 }
 
-export default PatientDashboard;
+export default React.memo(PatientDashboard);

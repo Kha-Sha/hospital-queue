@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db, getHospitalId } from '../firebase';
 import { useLanguage, LanguageSwitcher } from '../LanguageContext';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, getDocs, setDoc, collection, query, where, serverTimestamp } from 'firebase/firestore';
 import { motion } from 'framer-motion';
 import ParticleCanvas from '../components/ParticleCanvas';
@@ -14,13 +14,21 @@ function PatientLogin() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [focused, setFocused] = useState('');
+  const [checking, setChecking] = useState(true);
   const { t } = useLanguage();
 
   useEffect(() => {
-    if (auth.currentUser) {
-      localStorage.removeItem('qalm_seen_' + auth.currentUser.uid);
-      navigate('/patient-dashboard');
-    }
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (user?.email?.endsWith('@hospital.com')) {
+        localStorage.removeItem('qalm_seen_' + user.uid);
+        navigate('/patient-dashboard');
+      } else if (user) {
+        signOut(auth).then(() => setChecking(false));
+      } else {
+        setChecking(false);
+      }
+    });
+    return () => unsub();
   }, [navigate]);
 
   const handleLogin = async (e) => {
@@ -89,6 +97,12 @@ function PatientLogin() {
     boxSizing: 'border-box', outline: 'none', transition: 'all 0.3s ease',
     boxShadow: focused === name ? '0 0 0 3px rgba(37,99,235,0.15)' : 'none',
   });
+
+  if (checking) return (
+    <div style={{ minHeight: '100vh', background: 'radial-gradient(ellipse at 20% 50%, #0f1f3d 0%, #060d1a 60%, #0a0a0f 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '15px', fontFamily: 'DM Sans, sans-serif' }}>Loading...</p>
+    </div>
+  );
 
   return (
     <div style={{

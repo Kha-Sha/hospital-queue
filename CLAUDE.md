@@ -48,7 +48,7 @@ Not a queue management system — a patient experience tool that protects clinic
 - WhatsApp deep link for queue updates
 - Token receipt on assignment
 - Visit history (last 5 completed visits)
-- Cancel token (leave queue)
+- Cancel token (leave queue) — also deletes pending doc for clean re-registration
 - Queue paused banner
 - Multi-language: English, Hindi, Kannada, Tamil
 
@@ -59,48 +59,80 @@ Not a queue management system — a patient experience tool that protects clinic
 - Priority queue jump (purple button)
 - Call next token (per department)
 - Done / No Show buttons
+- 3+ min badge on called patient (visual cue to manually mark no-show)
 - WhatsApp reminder button (for patients 4+ positions back)
 - No-show recovery WhatsApp button
 - Patient recall system (patients not seen in 30+ days)
 - Manual queue reset button
-- Analytics dashboard (today's stats, completion rate, no-show rate, busiest department)
+- Analytics dashboard (today-only stats with date label, completion rate, no-show rate, busiest department)
+- Export patient data as CSV
 - Add doctor accounts (secondary Firebase app, no session interruption)
+- Deactivate doctor accounts (blocks login immediately)
 - Add staff/admin accounts
 - Patient search by name or phone
-- QR code display + print button
+- QR code display + print button (QR card sets document.title for clean printing)
 - Hospital settings: name, WhatsApp number, Google Place ID
 - Pause/resume queue
+- Offline banner when connection drops (changes sync when reconnected)
 
 ### Doctor Features
 - Department-specific queue view
 - Next patient card with name and token
 - Call next patient (atomic Firestore transaction)
 - Stats: now calling, waiting, completed
+- Deactivated account screen if admin deactivates
 
 ### Home/Landing Page
 - Hero: "Your queue. On your phone."
 - Feature cards (3)
 - Pricing section (Basic ₹999, Pro ₹1,999)
-- Lead capture form (saves to Firestore leads collection)
+- Lead capture form (10-digit phone validation, saves to Firestore leads collection)
 - Live demo modal (10-minute timer, fake patients, local state only)
 - Language selector (EN/HI/KN/TA)
 
 ## Key Technical Decisions
-- ParticleCanvas: single shared component, not copy-pasted
+- ParticleCanvas: single shared component with 500ms lazy start so UI renders first
 - CSS variables in :root for all colors and spacing
 - Firestore transactions for token assignment (race condition safe)
 - localStorage for hasBeenSeen, language preference, hospitalId, WhatsApp clicked
-- onAuthStateChanged pattern recommended but not yet implemented (known gap)
+- onAuthStateChanged used on all login and dashboard pages — eliminates hard-reload flash
 - window.innerWidth for responsive grid (known gap — doesn't update on resize)
+- Firestore offline persistence via initializeFirestore + persistentLocalCache (multi-tab safe)
+- React.lazy + Suspense for all pages except Home — code splits into per-page chunks
+- Analytics filter by today's date client-side from Firestore timestamps
 
 ## Known Remaining Gaps
-- onAuthStateChanged not used — auth redirect fires before Firebase restores session on hard reload
-- window.innerWidth responsive grid doesn't update on device rotation
-- WhatsApp Business API not integrated — using wa.me deep links (sufficient for pilot)
-- No admin self-registration — first admin account created manually in Firebase console
-- Analytics counts all-time data, not today-only (labeled "Today's Analytics" — misleading)
-- Auto no-show detection (3 min) claimed in features but client-side only — stops if browser closes
-- Particle canvas duplicated in AdminLogin and DoctorLogin (not yet extracted to ParticleCanvas component)
+- WhatsApp Business API not integrated — using wa.me deep links (manual, not automatic)
+- Admin self-registration not built — first admin account created manually in Firebase console (acceptable for first 50 clinics)
+- iOS web audio restricted in background — sound notification may not fire when screen is locked
+- Estimated appointment time uses simple 10 min/patient average — long consultations throw off estimates
+- window.innerWidth responsive grid doesn't update on device rotation (AdminDashboard)
+- No rate limiting on QR registration endpoint — abuse vector if URL is shared publicly
+
+## Pre-Sales Checklist (All Complete)
+- ✅ onAuthStateChanged on all dashboard pages
+- ✅ Firestore security rules — role-based, hospital-isolated
+- ✅ Multi-tenant architecture — hospitals/{adminUid}/...
+- ✅ Analytics shows today-only data with correct label
+- ✅ Auto no-show removed — replaced with 3+ min badge
+- ✅ Offline persistence enabled
+- ✅ Offline banner in admin dashboard
+- ✅ Loading speed — React.lazy, ParticleCanvas delay
+- ✅ Login flash eliminated — onAuthStateChanged in login pages
+- ✅ Data export as CSV
+- ✅ Doctor account deactivation
+- ✅ Cancel token with downstream cleanup
+- ✅ QR card printable page
+- ✅ Lead capture form on landing page
+- ✅ Demo modal (10 min, zero Firebase writes)
+- ✅ Pricing page (Basic ₹999, Pro ₹1999)
+- ✅ WhatsApp reminders (manual deep links)
+- ✅ No-show recovery WhatsApp
+- ✅ Patient recall (30+ days)
+- ✅ Google review prompt on Get Well Soon screen
+- ✅ Multi-language EN/HI/KN/TA
+- ✅ Mobile optimized
+- ✅ Firestore offline persistence
 
 ## Sales Playbook
 - Target: solo to 5-doctor private clinics, NOT government hospitals, NOT large chains
@@ -116,5 +148,5 @@ Not a queue management system — a patient experience tool that protects clinic
 - Native mobile app (React Native)
 - Full multi-hospital management dashboard
 - Advanced analytics with charts
-- onAuthStateChanged implementation
-- Today-only analytics filter
+- Rate limiting on patient registration
+- Estimated wait time using real consultation duration data

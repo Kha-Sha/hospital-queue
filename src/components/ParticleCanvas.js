@@ -60,9 +60,10 @@ function ParticleCanvas({ color = '#63b3ed', count = 80, speed = 0.3 }) {
       particles.forEach(p => { p.update(); p.draw(); });
       animationId = requestAnimationFrame(animate);
     };
-    animate();
+    const startTimeout = setTimeout(() => animate(), 500);
 
     return () => {
+      clearTimeout(startTimeout);
       cancelAnimationFrame(animationId);
       window.removeEventListener('resize', resize);
     };

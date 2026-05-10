@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebase';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { motion } from 'framer-motion';
 import ParticleCanvas from '../components/ParticleCanvas';
@@ -13,9 +13,19 @@ function DoctorLogin() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [focused, setFocused] = useState('');
+  const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    if (auth.currentUser?.email?.endsWith('@hospital-doctor.com')) navigate('/doctor-dashboard');
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (user?.email?.endsWith('@hospital-doctor.com')) {
+        navigate('/doctor-dashboard');
+      } else if (user) {
+        signOut(auth).then(() => setChecking(false));
+      } else {
+        setChecking(false);
+      }
+    });
+    return () => unsub();
   }, [navigate]);
 
   const handleLogin = async (e) => {
@@ -24,7 +34,6 @@ function DoctorLogin() {
     setLoading(true);
     try {
       const credential = await signInWithEmailAndPassword(auth, phone + '@hospital-doctor.com', password);
-      // Global doctors index stores hospitalId so we can scope all subsequent reads
       const doctorSnap = await getDoc(doc(db, 'doctors', credential.user.uid));
       if (doctorSnap.exists()) {
         localStorage.setItem('qalm_hospital_id', doctorSnap.data().hospitalId || 'default');
@@ -44,6 +53,12 @@ function DoctorLogin() {
     boxSizing: 'border-box', outline: 'none', transition: 'all 0.3s ease',
     boxShadow: focused === name ? '0 0 0 3px rgba(16,185,129,0.15)' : 'none',
   });
+
+  if (checking) return (
+    <div style={{ minHeight: '100vh', background: 'radial-gradient(ellipse at 80% 50%, #051a10 0%, #060d1a 60%, #0a0a0f 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '15px', fontFamily: 'DM Sans, sans-serif' }}>Loading...</p>
+    </div>
+  );
 
   return (
     <div style={{
