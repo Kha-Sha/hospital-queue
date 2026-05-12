@@ -6,6 +6,9 @@ import ParticleCanvas from '../components/ParticleCanvas';
 import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
+// TODO: Set REACT_APP_CONTACT_WHATSAPP in Vercel environment variables
+const CONTACT_WHATSAPP = process.env.REACT_APP_CONTACT_WHATSAPP || '919999999999';
+
 const DEMO_PATIENTS = [
   { id: 'd1', tokenNumber: 1, name: 'Priya Sharma', phone: '9876543210', department: 'General OPD' },
   { id: 'd2', tokenNumber: 2, name: 'Rajesh Kumar', phone: '9876543211', department: 'Cardiology' },
@@ -17,6 +20,7 @@ const DEMO_PATIENTS = [
 function DemoModal({ onClose }) {
   const [demoQueue, setDemoQueue] = useState(DEMO_PATIENTS);
   const [demoCompleted, setDemoCompleted] = useState(0);
+  const [demoNoShows, setDemoNoShows] = useState(0);
   const [timeLeft, setTimeLeft] = useState(600);
 
   useEffect(() => {
@@ -35,6 +39,7 @@ function DemoModal({ onClose }) {
   const removePatient = (id, type) => {
     setDemoQueue(q => q.filter(p => p.id !== id));
     if (type === 'done') setDemoCompleted(c => c + 1);
+    if (type === 'noshow') setDemoNoShows(n => n + 1);
   };
 
   return (
@@ -73,10 +78,10 @@ function DemoModal({ onClose }) {
         {/* Stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '20px' }}>
           {[
-            { label: 'NOW CALLING', value: 1, color: '#60a5fa' },
+            { label: 'NOW CALLING', value: demoQueue.length > 0 ? demoQueue[0].tokenNumber : '-', color: '#60a5fa' },
             { label: 'WAITING', value: demoQueue.length, color: 'white' },
             { label: 'COMPLETED', value: demoCompleted, color: '#4ade80' },
-            { label: 'NO SHOWS', value: 0, color: '#fbbf24' },
+            { label: 'NO SHOWS', value: demoNoShows, color: '#fbbf24' },
           ].map((s, i) => (
             <div key={i} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '16px', padding: '16px 12px', textAlign: 'center' }}>
               <div style={{ color: s.color, fontSize: '30px', fontWeight: '800', lineHeight: 1 }}>{s.value}</div>
@@ -97,7 +102,7 @@ function DemoModal({ onClose }) {
                 <div style={{ fontSize: '28px', marginBottom: '10px' }}>✓</div>Queue is clear
               </div>
             ) : demoQueue.map((patient, index) => (
-              <motion.div key={patient.id} initial={{ opacity: 1 }} exit={{ opacity: 0, x: 20 }} transition={{ duration: 0.2 }}
+              <motion.div key={patient.id} initial={{ opacity: 1 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.3 }}
                 style={{ padding: '14px 20px', borderBottom: index < demoQueue.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: index === 0 ? 'rgba(37,99,235,0.06)' : 'transparent' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                   <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: index === 0 ? 'linear-gradient(135deg, #1d4ed8, #3b82f6)' : 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', color: index === 0 ? 'white' : 'rgba(255,255,255,0.5)', fontSize: '15px', flexShrink: 0 }}>
@@ -215,7 +220,7 @@ function Home() {
             {t.iAmDoctor}
           </button>
           <button onClick={() => setShowDemo(true)} style={{ padding: '15px 32px', background: 'rgba(251,191,36,0.08)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.25)', borderRadius: '12px', fontSize: '15px', fontWeight: '600', cursor: 'pointer', backdropFilter: 'blur(10px)' }}>
-            See Live Demo
+            {t.seeLiveDemo}
           </button>
         </motion.div>
 
@@ -276,7 +281,7 @@ function Home() {
               </div>
               <a href="#contact" onClick={e => { e.preventDefault(); document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' }); }}
                 style={{ display: 'block', textAlign: 'center', padding: '13px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '12px', color: 'white', fontSize: '14px', fontWeight: '600', textDecoration: 'none', cursor: 'pointer' }}>
-                Start Free 30-Day Trial
+                Book Free Setup Call
               </a>
             </div>
 
@@ -310,7 +315,7 @@ function Home() {
               </div>
               <a href="#contact" onClick={e => { e.preventDefault(); document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' }); }}
                 style={{ display: 'block', textAlign: 'center', padding: '13px', background: 'linear-gradient(135deg, #2563eb, #1d4ed8)', border: 'none', borderRadius: '12px', color: 'white', fontSize: '14px', fontWeight: '600', textDecoration: 'none', cursor: 'pointer', boxShadow: '0 8px 24px rgba(37,99,235,0.35)' }}>
-                Start Free 30-Day Trial
+                Book Free Setup Call
               </a>
             </div>
           </div>
@@ -335,7 +340,7 @@ function Home() {
                 <h3 style={{ color: 'white', fontSize: '20px', fontWeight: '700', marginBottom: '8px' }}>We'll be in touch!</h3>
                 <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '14px', lineHeight: 1.6 }}>
                   We'll call you within 24 hours to set up your free trial.<br />
-                  Questions? WhatsApp us at <a href="https://wa.me/919999999999" style={{ color: '#25D366' }}>+91 99999 99999</a>.
+                  Questions? WhatsApp us at <a href={`https://wa.me/${CONTACT_WHATSAPP}`} style={{ color: '#25D366' }}>+{CONTACT_WHATSAPP.slice(0, 2)} {CONTACT_WHATSAPP.slice(2, 7)} {CONTACT_WHATSAPP.slice(7)}</a>.
                 </p>
               </motion.div>
             ) : (

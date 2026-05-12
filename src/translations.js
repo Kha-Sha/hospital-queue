@@ -86,6 +86,7 @@ const translations = {
     phoneLength: 'Please enter a valid 10-digit phone number',
     passwordLength: 'Password must be at least 6 characters',
     noHospitalParam: 'Please scan the QR code at the clinic to register.',
+    seeLiveDemo: 'See Live Demo',
   },
   hi: {
     tagline: 'प्रतीक्षा समाप्त हुई।',
@@ -174,6 +175,7 @@ const translations = {
     phoneLength: 'कृपया 10 अंकों का वैध फ़ोन नंबर दर्ज करें',
     passwordLength: 'पासवर्ड कम से कम 6 वर्णों का होना चाहिए',
     noHospitalParam: 'पंजीकरण के लिए क्लिनिक में QR कोड स्कैन करें।',
+    seeLiveDemo: 'लाइव डेमो देखें',
   },
   kn: {
     tagline: 'ನಿರೀಕ್ಷೆ ಮುಗಿಯಿತು.',
@@ -262,6 +264,7 @@ const translations = {
     phoneLength: 'ದಯವಿಟ್ಟು 10 ಅಂಕಿಯ ಫೋನ್ ನಂಬರ್ ನಮೂದಿಸಿ',
     passwordLength: 'ಪಾಸ್‌ವರ್ಡ್ ಕನಿಷ್ಠ 6 ಅಕ್ಷರಗಳಿರಬೇಕು',
     noHospitalParam: 'ನೋಂದಾಯಿಸಲು ಕ್ಲಿನಿಕ್‌ನಲ್ಲಿ QR ಕೋಡ್ ಸ್ಕ್ಯಾನ್ ಮಾಡಿ.',
+    seeLiveDemo: 'ಲೈವ್ ಡೆಮೋ ನೋಡಿ',
   },
   ta: {
     tagline: 'காத்திருப்பு முடிந்தது.',
@@ -350,6 +353,7 @@ const translations = {
     phoneLength: '10 இலக்க தொலைபேசி எண்ணை உள்ளிடுங்கள்',
     passwordLength: 'கடவுச்சொல் குறைந்தது 6 எழுத்துகள் இருக்க வேண்டும்',
     noHospitalParam: 'பதிவு செய்ய கிளினிக்கில் QR குறியீட்டை ஸ்கேன் செய்யுங்கள்.',
+    seeLiveDemo: 'நேரடி டெமோ பார்க்கவும்',
   },
 };
 

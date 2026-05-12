@@ -26,8 +26,9 @@ function PatientRegister() {
     const hospitalId = params.get('hospital');
     if (!hospitalId) { setNoHospital(true); return; }
     localStorage.setItem('qalm_hospital_id', hospitalId);
-    getDoc(doc(db, 'hospitals', getHospitalId(), 'settings', 'hospital')).then(snap => {
-      if (snap.exists() && snap.data().activeDepartments?.length) {
+    getDoc(doc(db, 'hospitals', hospitalId, 'settings', 'hospital')).then(snap => {
+      if (!snap.exists()) { setNoHospital(true); return; }
+      if (snap.data().activeDepartments?.length) {
         setActiveDepartments(snap.data().activeDepartments);
       }
     });
